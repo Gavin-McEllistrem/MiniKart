@@ -12,19 +12,20 @@ html, body {
     display: block;
   }
   
-  #ui {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    display: flex;
-    justify-content: space-between;
-    padding: 8px 12px;
-    background: rgba(0, 0, 0, 0.6);
-    z-index: 10;
-  }
-  
-  #group-id {
+#ui {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 10;
+}
+
+#group-id {
     font-weight: bold;
   }
   

@@ -8,7 +8,7 @@ export class InputManager {
   constructor() {
     // Raw input state
     this.keys = {};
-    this.touch = { up: false, down: false, left: false, right: false };
+    this.touch = { up: false, down: false, left: false, right: false, drift: false };
     this.gamepad = null;
 
     // Normalized output
@@ -95,7 +95,8 @@ export class InputManager {
     // Check drift (Space or Shift)
     const driftPressed =
       this.keys[' '] ||
-      this.keys['shift'];
+      this.keys['shift'] ||
+      this.touch.drift;
 
     // Normalize inputs
     this.state.throttle = throttlePressed ? 1.0 : 0.0;

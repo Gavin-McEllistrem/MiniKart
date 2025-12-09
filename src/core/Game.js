@@ -26,6 +26,8 @@ export class Game {
     // Game state
     this.isRunning = false;
     this.updateCallbacks = [];
+    this.winCondition = options.winCondition ?? { lapsToWin: 3, enabled: true };
+    this.winner = null;
 
     // Collision settings
     this.wallSlideSpeedPenalty = options.wallSlideSpeedPenalty ?? 0.7;
@@ -89,6 +91,7 @@ export class Game {
    */
   start() {
     this.isRunning = true;
+    this.winner = null;
     this.clock.start();
   }
 
@@ -104,6 +107,7 @@ export class Game {
    */
   update() {
     if (!this.isRunning) return;
+    if (this.winner) return;
 
     const delta = this.clock.getDelta();
 
@@ -146,9 +150,12 @@ export class Game {
       // Handle collisions
       this.handleCollisions(kart, prevPos);
 
-      // Update checkpoint system
+      // Update checkpoint system and check win
       if (this.track && this.track.checkpointSystem) {
-        this.track.checkpointSystem.update(kart.id, kart.pos);
+        const result = this.track.checkpointSystem.update(kart.id, kart.pos);
+        if (result?.type === 'lap') {
+          this._checkWin(kart.id, result.lapNumber);
+        }
       }
 
       // Only the player drives the camera
@@ -269,5 +276,17 @@ export class Game {
     this.updateCallbacks = [];
     this.karts = [];
     this.player = null;
+  }
+
+  _checkWin(kartId, lapNumber) {
+    if (!this.winCondition?.enabled) return;
+    if (this.winner) return;
+
+    const lapsToWin = this.winCondition.lapsToWin ?? 3;
+    if (lapNumber >= lapsToWin) {
+      this.winner = kartId;
+      this.isRunning = false;
+      eventBus.emit('race-won', { kartId });
+    }
   }
 }

@@ -2,12 +2,57 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Mini Kart 3D – Group 1234</title>
+  <title>Mini Kart 3D – Group 9941</title>
   <link rel="stylesheet" href="style.css">
+  <style>
+    #win-modal {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.65);
+      z-index: 1000;
+    }
+    #win-card {
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 24px 32px;
+      border-radius: 12px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+      text-align: center;
+      min-width: 260px;
+      border: 1px solid #1e293b;
+    }
+    #win-card h2 {
+      margin: 0 0 8px;
+      letter-spacing: 0.5px;
+    }
+    #win-card p {
+      margin: 0 0 16px;
+      color: #cbd5e1;
+    }
+    #win-card button {
+      margin: 6px;
+      padding: 10px 16px;
+      border-radius: 8px;
+      border: none;
+      font-weight: 600;
+      cursor: pointer;
+      color: #0f172a;
+      background: #38bdf8;
+      border: 1px solid #0ea5e9;
+    }
+    #win-card button.secondary {
+      background: transparent;
+      color: #e2e8f0;
+      border-color: #334155;
+    }
+  </style>
 </head>
 <body>
   <div id="ui">
-    <div id="group-id">Mini Kart 3D – Group 1234</div>
+    <div id="group-id">Mini Kart 3D – Group 9941</div>
     <button id="mode-btn">Mode: Prototype</button>
   </div>
 
@@ -87,6 +132,21 @@
       <button class="ctrl-btn" data-action="left">←</button>
       <button class="ctrl-btn" data-action="down">↓</button>
       <button class="ctrl-btn" data-action="right">→</button>
+    </div>
+    <div class="control-row">
+      <button class="ctrl-btn" data-action="drift">Drift</button>
+      <button class="ctrl-btn" data-action="reset">Reset</button>
+    </div>
+  </div>
+
+  <div id="win-modal">
+    <div id="win-card">
+      <h2>Race Finished</h2>
+      <p id="win-text">Winner: Player</p>
+      <div>
+        <button id="win-restart">Restart Race</button>
+        <button id="win-menu" class="secondary">Main Menu</button>
+      </div>
     </div>
   </div>
   <script type="importmap">

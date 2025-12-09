@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { ArcadeController } from '../physics/ArcadeController.js';
 import { eventBus } from '../utils/EventBus.js';
 
@@ -16,6 +17,7 @@ export class Kart {
     this.isPlayer = options.isPlayer ?? true;
     this.color = options.color ?? 0xff4444;
     this.mode = options.mode ?? "prototype";
+    this.renderMode = options.renderMode ?? 'prototype';
 
     // Transform
     this.pos = new THREE.Vector3(0, 0.5, 0);
@@ -28,8 +30,12 @@ export class Kart {
     });
 
     // Visual mesh
-    this.mesh = this._makeMesh();
-    this.scene.add(this.mesh);
+    if (this.renderMode === 'full') {
+      this._useGltfModel();
+    } else {
+      this.mesh = this._buildFormulaGroup(this.renderMode);
+      this.scene.add(this.mesh);
+    }
 
     // Collision box
     this.box = new THREE.Box3();
@@ -90,44 +96,83 @@ export class Kart {
   }
 
   /**
-   * Create the kart 3D mesh
+   * Create the kart 3D mesh (formula-inspired), optionally for prototype/full.
    */
-  _makeMesh() {
+  _buildFormulaGroup(renderMode = 'prototype') {
     const group = new THREE.Group();
 
-    // Body
-    const bodyGeom = new THREE.BoxGeometry(2, 1, 3);
-    const bodyMat = new THREE.MeshStandardMaterial({
-      color: this.color,
-      metalness: 0.2,
-      roughness: 0.7
-    });
-    const body = new THREE.Mesh(bodyGeom, bodyMat);
-    body.position.y = 0.5;
-    body.castShadow = true;
-    body.receiveShadow = true;
-    group.add(body);
+    // Chassis base
+    const baseGeom = new THREE.BoxGeometry(2.4, 0.6, 4.4);
+    const baseMat = this._createBodyMaterial(renderMode);
+    const base = new THREE.Mesh(baseGeom, baseMat);
+    base.position.y = 0.45;
+    base.castShadow = true;
+    base.receiveShadow = true;
+    group.add(base);
+    this.bodyMesh = base;
 
-    // Front indicator (arrow/cone to show which way is forward)
-    const coneGeom = new THREE.ConeGeometry(0.5, 1.2, 8);
-    const coneMat = new THREE.MeshStandardMaterial({
-      color: 0xffff00, // Yellow
-      emissive: 0x444400
-    });
-    const cone = new THREE.Mesh(coneGeom, coneMat);
-    cone.position.set(0, 1.3, 1.8); // Front of kart
-    cone.rotation.x = Math.PI / 2; // Point forward
-    group.add(cone);
+    // Nose cone
+    const noseGeom = new THREE.CylinderGeometry(0.35, 0.65, 1.6, 16);
+    const noseMat = this._createBodyMaterial(renderMode);
+    const nose = new THREE.Mesh(noseGeom, noseMat);
+    nose.rotation.x = Math.PI / 2;
+    nose.position.set(0, 0.6, 2.3);
+    nose.castShadow = true;
+    group.add(nose);
+
+    // Cockpit/halo
+    const cockpitGeom = new THREE.CylinderGeometry(0.35, 0.5, 1.2, 12);
+    const cockpitMat = new THREE.MeshStandardMaterial({ color: 0x1b1f2a, metalness: 0.45, roughness: 0.35 });
+    const cockpit = new THREE.Mesh(cockpitGeom, cockpitMat);
+    cockpit.rotation.x = Math.PI / 2;
+    cockpit.position.set(0, 1.05, -0.2);
+    cockpit.castShadow = true;
+    group.add(cockpit);
+    this.coneMesh = cockpit;
+
+    // Front wing
+    const fwGeom = new THREE.BoxGeometry(3.4, 0.15, 0.9);
+    const fwMat = this._createBodyMaterial(renderMode);
+    const frontWing = new THREE.Mesh(fwGeom, fwMat);
+    frontWing.position.set(0, 0.25, 3.0);
+    frontWing.castShadow = true;
+    group.add(frontWing);
+
+    // Rear wing
+    const rwGeom = new THREE.BoxGeometry(2.6, 0.25, 0.6);
+    const rwMat = this._createBodyMaterial(renderMode);
+    const rearWing = new THREE.Mesh(rwGeom, rwMat);
+    rearWing.position.set(0, 0.95, -2.5);
+    rearWing.castShadow = true;
+    group.add(rearWing);
+
+    // Side pods
+    const podGeom = new THREE.BoxGeometry(0.6, 0.45, 1.8);
+    const podMat = this._createBodyMaterial(renderMode);
+    const leftPod = new THREE.Mesh(podGeom, podMat);
+    leftPod.position.set(-1.5, 0.55, -0.5);
+    leftPod.castShadow = true;
+    group.add(leftPod);
+    const rightPod = leftPod.clone();
+    rightPod.position.x = 1.5;
+    group.add(rightPod);
+
+    // Engine cover
+    const coverGeom = new THREE.BoxGeometry(1.2, 0.7, 2.0);
+    const cover = new THREE.Mesh(coverGeom, this._createBodyMaterial(renderMode));
+    cover.position.set(0, 0.9, -1.2);
+    cover.castShadow = true;
+    group.add(cover);
 
     // Wheels
-    const wheelGeom = new THREE.CylinderGeometry(0.4, 0.4, 0.5, 16);
-    const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+    const wheelGeom = new THREE.CylinderGeometry(0.6, 0.6, 0.65, 20);
+    const wheelMat = this._createWheelMaterial(renderMode);
 
     const wheelPositions = [
-      [-0.9, 0.2,  1.2],  // Front left
-      [ 0.9, 0.2,  1.2],  // Front right
-      [-0.9, 0.2, -1.2],  // Rear left
-      [ 0.9, 0.2, -1.2],  // Rear right
+      [-1.5, 0.35,  1.9],  // Front left
+      [ 1.5, 0.35,  1.9],  // Front right
+      [-1.5, 0.35, -1.9],  // Rear left
+      [ 1.5, 0.35, -1.9],  // Rear right
     ];
 
     this.wheels = [];
@@ -285,6 +330,83 @@ export class Kart {
    */
   destroy() {
     this.scene.remove(this.mesh);
+  }
+
+  /**
+   * Switch visual mode (prototype/full)
+   */
+  setRenderMode(mode) {
+    if (mode !== 'prototype' && mode !== 'full') return;
+    if (this.renderMode === mode) return;
+    this.renderMode = mode;
+    // rebuild mesh for new mode
+    this.scene.remove(this.mesh);
+    if (mode === 'full') {
+      this._useGltfModel();
+    } else {
+      this.mesh = this._buildFormulaGroup(mode);
+      this.scene.add(this.mesh);
+    }
+  }
+
+  _createBodyMaterial(mode) {
+    if (mode === 'full') {
+      const tex = this._makeStripeTexture(this.color);
+      return new THREE.MeshStandardMaterial({
+        color: this.color,
+        map: tex,
+        metalness: 0.35,
+        roughness: 0.45
+      });
+    }
+    return new THREE.MeshStandardMaterial({
+      color: this.color,
+      metalness: 0.2,
+      roughness: 0.7
+    });
+  }
+
+  _createWheelMaterial(mode) {
+    if (mode === 'full') {
+      const tex = this._makeNoiseTexture('#111111', '#222222');
+      return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9, metalness: 0.1 });
+    }
+    return new THREE.MeshStandardMaterial({ color: 0x111111 });
+  }
+
+  _makeStripeTexture(hexColor) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    const base = '#' + new THREE.Color(hexColor).getHexString();
+    ctx.fillStyle = base;
+    ctx.fillRect(0, 0, 128, 128);
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    for (let x = -16; x < 144; x += 24) {
+      ctx.fillRect(x, 0, 12, 128);
+    }
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(1, 1);
+    return texture;
+  }
+
+  _makeNoiseTexture(colorA, colorB) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = colorA;
+    ctx.fillRect(0, 0, 64, 64);
+    ctx.fillStyle = colorB;
+    for (let i = 0; i < 300; i++) {
+      ctx.fillRect(Math.random() * 64, Math.random() * 64, 1, 1);
+    }
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(2, 2);
+    return texture;
   }
 }
 

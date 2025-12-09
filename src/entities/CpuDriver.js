@@ -495,4 +495,30 @@ export class CpuDriver {
 
     return current; // do not move backward
   }
+
+  setDebugVisible(track, visible) {
+    this.debugPath = visible;
+    if (!visible) {
+      if (this.debugLine) {
+        track.scene.remove(this.debugLine);
+        this.debugLine.geometry.dispose();
+        this.debugLine.material.dispose();
+        this.debugLine = null;
+      }
+      if (this.debugCurrentWp) {
+        track.scene.remove(this.debugCurrentWp);
+        this.debugCurrentWp.geometry.dispose();
+        this.debugCurrentWp.material.dispose();
+        this.debugCurrentWp = null;
+      }
+      if (this.debugTargetPoint) {
+        track.scene.remove(this.debugTargetPoint);
+        this.debugTargetPoint.geometry.dispose();
+        this.debugTargetPoint.material.dispose();
+        this.debugTargetPoint = null;
+      }
+    } else if (track && this.waypoints.length > 0) {
+      this._updateDebugPath(track, this.waypoints);
+    }
+  }
 }

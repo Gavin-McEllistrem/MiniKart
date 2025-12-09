@@ -13,6 +13,10 @@ import { eventBus } from "./src/utils/EventBus.js";
 let renderer;
 let game;
 let chaseCamera;
+let renderMode = 'prototype'; // prototype | full
+let cpuDebugVisible = false;
+let winModalEl;
+let winTextEl;
 
 // UI elements
 const hudEl = document.getElementById("hud");
@@ -20,6 +24,8 @@ const modeBtn = document.getElementById("mode-btn");
 const mainMenu = document.getElementById("main-menu");
 const playBtn = document.getElementById("play-btn");
 const editorBtn = document.getElementById("editor-btn");
+const winRestartBtn = document.getElementById("win-restart");
+const winMenuBtn = document.getElementById("win-menu");
 
 // Check URL params for test mode
 const urlParams = new URLSearchParams(window.location.search);
@@ -76,7 +82,8 @@ function startGame(customTrackData = null) {
   // Create game instance
   game = new Game(renderer.scene, {
     wallSlideSpeedPenalty: 0.7,
-    wallStopSpeedPenalty: 0.5
+    wallStopSpeedPenalty: 0.5,
+    winCondition: { lapsToWin: 3, enabled: true }
   });
 
   // Create input manager
@@ -88,7 +95,8 @@ function startGame(customTrackData = null) {
   const track = new Track(renderer.scene, {
     tileSize: 10,
     trackData: trackData.layout,
-    checkpointsData: trackData.checkpoints || []
+    checkpointsData: trackData.checkpoints || [],
+    renderMode
   });
   game.setTrack(track);
 
@@ -100,7 +108,8 @@ function startGame(customTrackData = null) {
     id: 'player',
     isPlayer: true,
     color: 0xff5555,
-    mode: 'prototype'
+    mode: 'prototype',
+    renderMode
   });
   player.pos.copy(startTransform.position);
   player.heading = startTransform.heading;
@@ -114,7 +123,7 @@ function startGame(customTrackData = null) {
     isPlayer: false,
     color: 0x3a86ff,
     mode: 'prototype',
-    maxSpeed: 8000
+    renderMode
   });
 
   // Offset the CPU kart slightly so it doesn't overlap the player on spawn
@@ -151,8 +160,9 @@ function startGame(customTrackData = null) {
   // Setup event listeners
   setupEventListeners();
 
-  // Hide mode button
-  modeBtn.style.display = 'none';
+  modeBtn.style.display = 'inline-block';
+  updateModeButton();
+  updateCpuDebugButton();
 
   // Show appropriate return button
   const returnBtn = document.createElement('button');
@@ -239,6 +249,12 @@ function setupControls() {
       game.resetPlayer();
       console.log('Player reset');
     }
+
+    // Toggle CPU debug visuals (B key)
+    if (key === 'b') {
+      cpuDebugVisible = !cpuDebugVisible;
+      toggleCpuDebug(cpuDebugVisible);
+    }
   });
 }
 
@@ -268,6 +284,11 @@ function setupEventListeners() {
 
   eventBus.on('lap-completed', (data) => {
     console.log(`Lap ${data.lapNumber} completed! Time: ${data.lapTime.toFixed(2)}s`);
+  });
+
+  eventBus.on('race-won', (data) => {
+    const winText = data.kartId === 'player' ? 'You win!' : `${data.kartId} wins!`;
+    showWinModal(winText);
   });
 }
 
@@ -383,6 +404,7 @@ function updateHUD() {
     `SPACE/SHIFT - Drift\n` +
     `C - Toggle Camera Mode\n` +
     `V - Toggle Debug Vectors\n` +
+    `B - Toggle CPU Debug\n` +
     `H - Toggle Checkpoints\n` +
     `R - Reset Kart\n` +
     `\n` +
@@ -390,3 +412,66 @@ function updateHUD() {
     `Green arrow = Heading\n` +
     `Red arrow = Movement`;
 }
+
+function updateModeButton() {
+  modeBtn.textContent = `Mode: ${renderMode === 'prototype' ? 'Prototype' : 'Full'}`;
+}
+
+function updateCpuDebugButton() {
+  // No CPU debug button in UI; keep state internal
+}
+
+function toggleCpuDebug(visible) {
+  const cpu = game?.karts?.find(k => !k.isPlayer);
+  if (cpu?.aiDriver) {
+    cpu.aiDriver.setDebugVisible(game.track, visible);
+  }
+  updateCpuDebugButton();
+}
+
+// Mode toggle UI
+modeBtn?.addEventListener('click', () => {
+  renderMode = renderMode === 'prototype' ? 'full' : 'prototype';
+  if (game?.track) {
+    game.track.setRenderMode(renderMode);
+  }
+  if (game?.karts) {
+    for (const kart of game.karts) {
+      if (kart.setRenderMode) {
+        kart.setRenderMode(renderMode);
+      }
+    }
+  }
+  updateModeButton();
+});
+
+// CPU debug toggle UI
+// Touch reset button
+const resetBtn = document.querySelector('.ctrl-btn[data-action="reset"]');
+resetBtn?.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  game?.resetPlayer();
+});
+
+function showWinModal(text) {
+  if (!winModalEl) {
+    winModalEl = document.getElementById('win-modal');
+    winTextEl = document.getElementById('win-text');
+  }
+  if (winTextEl) {
+    winTextEl.textContent = text;
+  }
+  if (winModalEl) {
+    winModalEl.style.display = 'flex';
+  }
+}
+
+winRestartBtn?.addEventListener('click', () => {
+  if (winModalEl) winModalEl.style.display = 'none';
+  location.reload();
+});
+
+winMenuBtn?.addEventListener('click', () => {
+  if (winModalEl) winModalEl.style.display = 'none';
+  location.reload();
+});

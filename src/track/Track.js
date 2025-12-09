@@ -16,6 +16,7 @@ export class Track {
     this.trackData = options.trackData ?? []; // 2D array of tile IDs
     this.checkpointsData = options.checkpointsData ?? []; // Array of checkpoint definitions
     this.decorationsData = options.decorationsData ?? []; // Array of decoration definitions
+    this.renderMode = options.renderMode ?? 'prototype'; // 'prototype' | 'full'
 
     // Track metadata
     this.width = 0; // Number of tiles wide
@@ -27,6 +28,7 @@ export class Track {
     this.tileMeshes = [];
     this.trackGroup = new THREE.Group();
     this.scene.add(this.trackGroup);
+    this.materialCache = new Map();
 
     // Checkpoint system
     this.checkpointSystem = null;
@@ -48,11 +50,22 @@ export class Track {
   }
 
   /**
+   * Set render mode and rebuild materials
+   */
+  setRenderMode(mode) {
+    if (mode !== 'prototype' && mode !== 'full') return;
+    if (this.renderMode === mode) return;
+    this.renderMode = mode;
+    this.buildTrack();
+  }
+
+  /**
    * Build track geometry from track data
    */
   buildTrack() {
     // Clear existing track
     this.clearTrack();
+    this.materialCache.clear();
 
     this.height = this.trackData.length;
     this.width = this.trackData[0]?.length ?? 0;
@@ -144,11 +157,7 @@ export class Track {
     const height = tile.height ?? 0.2;
     const geometry = new THREE.BoxGeometry(this.tileSize, height, this.tileSize);
 
-    const material = new THREE.MeshStandardMaterial({
-      color: tile.color,
-      roughness: tile.roughness,
-      metalness: tile.metalness
-    });
+    const material = this._getTileMaterial(tile);
 
     const mesh = new THREE.Mesh(geometry, material);
     mesh.position.set(x, height / 2, z);
@@ -169,6 +178,118 @@ export class Track {
     }
 
     return mesh;
+  }
+
+  /**
+   * Create or reuse a material for a tile based on render mode
+   */
+  _getTileMaterial(tile) {
+    const key = `${this.renderMode}-${tile.id}`;
+    if (this.materialCache.has(key)) {
+      return this.materialCache.get(key);
+    }
+
+    let material;
+    if (this.renderMode === 'prototype') {
+      material = new THREE.MeshStandardMaterial({
+        color: tile.color,
+        roughness: tile.roughness,
+        metalness: tile.metalness
+      });
+    } else {
+      const texture = this._createTileTexture(tile);
+      material = new THREE.MeshStandardMaterial({
+        color: tile.color,
+        roughness: tile.roughness,
+        metalness: tile.metalness,
+        map: texture
+      });
+    }
+
+    this.materialCache.set(key, material);
+    return material;
+  }
+
+  /**
+   * Generate simple procedural textures for tiles
+   */
+  _createTileTexture(tile) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+
+    const fill = (color) => {
+      ctx.fillStyle = color;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    };
+
+    const addNoise = (alpha = 0.12) => {
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      for (let i = 0; i < imgData.data.length; i += 4) {
+        const v = Math.floor(Math.random() * 255);
+        imgData.data[i] += v * alpha;
+        imgData.data[i + 1] += v * alpha;
+        imgData.data[i + 2] += v * alpha;
+      }
+      ctx.putImageData(imgData, 0, 0);
+    };
+
+    const addStripes = (colorA, colorB, width = 10) => {
+      for (let x = -width; x < canvas.width + width; x += width * 2) {
+        ctx.fillStyle = colorA;
+        ctx.fillRect(x, 0, width, canvas.height);
+        ctx.fillStyle = colorB;
+        ctx.fillRect(x + width, 0, width, canvas.height);
+      }
+    };
+
+    if (tile.type === 'road' || tile.id === 'start_finish') {
+      fill('#1f1f24');
+      addNoise(0.18);
+      if (tile.id === 'start_finish') {
+        addStripes('#ffffff', '#000000', 6);
+      }
+    } else if (tile.id === 'grass' || tile.type === 'offroad') {
+      fill('#1f7a42');
+      addNoise(0.35);
+      ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+      for (let i = 0; i < 60; i++) {
+        ctx.beginPath();
+        ctx.moveTo(Math.random() * canvas.width, Math.random() * canvas.height);
+        ctx.lineTo(Math.random() * canvas.width, Math.random() * canvas.height);
+        ctx.stroke();
+      }
+    } else if (tile.id === 'dirt') {
+      fill('#6d4c32');
+      addNoise(0.3);
+      ctx.fillStyle = 'rgba(30,15,0,0.18)';
+      for (let i = 0; i < 90; i++) {
+        ctx.beginPath();
+        ctx.arc(Math.random() * canvas.width, Math.random() * canvas.height, 2 + Math.random() * 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (tile.id === 'barrier') {
+      addStripes('#ff3b3b', '#ffffff', 10);
+    } else if (tile.id === 'wall') {
+      fill('#cfd4da');
+      addNoise(0.12);
+      ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+      for (let y = 0; y < canvas.height; y += 16) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+      }
+    } else {
+      fill('#4a4a4a');
+      addNoise(0.15);
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(1, 1);
+    return texture;
   }
 
   /**
