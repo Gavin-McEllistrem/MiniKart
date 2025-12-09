@@ -108,6 +108,11 @@ export class Game {
       // Handle collisions
       this.handleCollisions(prevPos);
 
+      // Update checkpoint system
+      if (this.track && this.track.checkpointSystem) {
+        this.track.checkpointSystem.update(this.player.id, this.player.pos);
+      }
+
       // Update camera
       if (this.camera) {
         this.camera.update(delta, this.player);
@@ -207,6 +212,11 @@ export class Game {
 
     const startTransform = this.track.getStartTransform();
     this.player.reset(startTransform.position, startTransform.heading);
+
+    // Reset checkpoint progress
+    if (this.track.checkpointSystem) {
+      this.track.checkpointSystem.resetKart(this.player.id);
+    }
 
     if (this.camera) {
       this.camera.reset(this.player);

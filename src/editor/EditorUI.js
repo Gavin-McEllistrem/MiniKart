@@ -9,6 +9,7 @@ import { MapEditor } from './MapEditor.js';
 export class EditorUI {
   constructor(mapEditor) {
     this.editor = mapEditor;
+    this.editor.ui = this; // Set bidirectional reference
 
     // UI Elements
     this.editorPanel = document.getElementById('editor-ui');
@@ -18,6 +19,12 @@ export class EditorUI {
     this.rotationDisplay = document.getElementById('rotation-display');
     this.trackNameInput = document.getElementById('track-name');
 
+    // Mode elements
+    this.modeTilesBtn = document.getElementById('mode-tiles-btn');
+    this.modeCheckpointsBtn = document.getElementById('mode-checkpoints-btn');
+    this.tilePalette = document.getElementById('tile-palette');
+    this.checkpointControls = document.getElementById('checkpoint-controls');
+
     // Buttons
     this.rotateBtn = document.getElementById('rotate-btn');
     this.undoBtn = document.getElementById('undo-btn');
@@ -26,8 +33,18 @@ export class EditorUI {
     this.testBtn = document.getElementById('test-btn');
     this.saveBtn = document.getElementById('save-btn');
     this.loadBtn = document.getElementById('load-btn');
+    this.importBtn = document.getElementById('import-btn');
+    this.fileInput = document.getElementById('file-input');
     this.exportBtn = document.getElementById('export-btn');
     this.exitBtn = document.getElementById('exit-editor-btn');
+
+    // Checkpoint buttons
+    this.toggleFinishLineBtn = document.getElementById('toggle-finish-line-btn');
+    this.clearCheckpointsBtn = document.getElementById('clear-checkpoints-btn');
+    this.checkpointItemsDiv = document.getElementById('checkpoint-items');
+
+    // Checkpoint state
+    this.nextIsFinishLine = false;
 
     // Initialize
     this.setupTilePalette();
@@ -153,6 +170,32 @@ export class EditorUI {
    * Setup button event listeners
    */
   setupEventListeners() {
+    // Mode switching
+    this.modeTilesBtn.addEventListener('click', () => {
+      this.switchMode('tiles');
+    });
+
+    this.modeCheckpointsBtn.addEventListener('click', () => {
+      this.switchMode('checkpoints');
+    });
+
+    // Checkpoint controls
+    this.toggleFinishLineBtn.addEventListener('click', () => {
+      this.nextIsFinishLine = !this.nextIsFinishLine;
+      this.toggleFinishLineBtn.textContent = this.nextIsFinishLine
+        ? '🏁 Next: Finish Line'
+        : 'Make Next Finish Line';
+      this.toggleFinishLineBtn.classList.toggle('primary', this.nextIsFinishLine);
+    });
+
+    this.clearCheckpointsBtn.addEventListener('click', () => {
+      if (confirm('Clear all checkpoints?')) {
+        this.editor.checkpoints = [];
+        this.editor.renderAllCheckpoints();
+        this.updateCheckpointList();
+      }
+    });
+
     // Rotate button
     this.rotateBtn.addEventListener('click', () => {
       this.editor.rotateTile();
@@ -180,12 +223,22 @@ export class EditorUI {
       }
     });
 
-    // Load
+    // Load from LocalStorage
     this.loadBtn.addEventListener('click', () => {
       this.showLoadDialog();
     });
 
-    // Export
+    // Import from JSON file
+    this.importBtn.addEventListener('click', () => {
+      this.fileInput.click();
+    });
+
+    // Handle file selection
+    this.fileInput.addEventListener('change', (e) => {
+      this.handleFileImport(e);
+    });
+
+    // Export to JSON file
     this.exportBtn.addEventListener('click', () => {
       this.editor.trackName = this.trackNameInput.value;
       this.editor.exportTrack();
@@ -249,7 +302,11 @@ export class EditorUI {
   setupEditorEvents() {
     // Grid hover
     eventBus.on('editor-grid-hover', (data) => {
-      this.gridCoordsSpan.textContent = `(${data.gridX}, ${data.gridZ})`;
+      if (data.gridX >= 0) {
+        this.gridCoordsSpan.textContent = `(${data.gridX}, ${data.gridZ})`;
+      } else {
+        this.gridCoordsSpan.textContent = `(${data.worldX}, ${data.worldZ})`;
+      }
     });
 
     // Rotation changed
@@ -265,6 +322,16 @@ export class EditorUI {
     // Track exported
     eventBus.on('editor-track-exported', (data) => {
       console.log('Track exported:', data.trackName);
+    });
+
+    // Checkpoint added
+    eventBus.on('checkpoint-added', (data) => {
+      this.updateCheckpointList();
+    });
+
+    // Checkpoint removed
+    eventBus.on('checkpoint-removed', (data) => {
+      this.updateCheckpointList();
     });
   }
 
@@ -303,5 +370,106 @@ export class EditorUI {
    */
   updateTrackName(name) {
     this.trackNameInput.value = name;
+  }
+
+  /**
+   * Switch editor mode
+   */
+  switchMode(mode) {
+    this.editor.setEditorMode(mode);
+
+    // Update button states
+    this.modeTilesBtn.classList.toggle('active', mode === 'tiles');
+    this.modeCheckpointsBtn.classList.toggle('active', mode === 'checkpoints');
+
+    // Show/hide relevant panels
+    if (mode === 'tiles') {
+      this.tilePalette.classList.remove('hidden');
+      this.checkpointControls.classList.add('hidden');
+    } else if (mode === 'checkpoints') {
+      this.tilePalette.classList.add('hidden');
+      this.checkpointControls.classList.remove('hidden');
+      this.updateCheckpointList();
+    }
+  }
+
+  /**
+   * Update checkpoint list UI
+   */
+  updateCheckpointList() {
+    this.checkpointItemsDiv.innerHTML = '';
+
+    if (this.editor.checkpoints.length === 0) {
+      this.checkpointItemsDiv.innerHTML = '<div class="info-text">No checkpoints yet</div>';
+      return;
+    }
+
+    this.editor.checkpoints.forEach((cp, index) => {
+      const item = document.createElement('div');
+      item.className = 'checkpoint-item';
+      item.innerHTML = `
+        <span>${cp.isFinishLine ? '🏁' : '✓'} Checkpoint ${index + 1}</span>
+        <button class="delete-checkpoint-btn" data-id="${cp.id}">🗑️</button>
+      `;
+
+      // Delete button handler
+      const deleteBtn = item.querySelector('.delete-checkpoint-btn');
+      deleteBtn.addEventListener('click', () => {
+        this.editor.removeCheckpoint(cp.id);
+      });
+
+      this.checkpointItemsDiv.appendChild(item);
+    });
+  }
+
+  /**
+   * Handle JSON file import
+   */
+  handleFileImport(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Check if it's a JSON file
+    if (!file.name.endsWith('.json')) {
+      alert('Please select a JSON file.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const trackData = JSON.parse(e.target.result);
+
+        // Validate track data
+        if (!trackData.layout || !Array.isArray(trackData.layout)) {
+          alert('Invalid track file: missing layout data.');
+          return;
+        }
+
+        // Load the track
+        this.editor.loadTrack(trackData);
+        this.updateTrackName(trackData.name || 'Imported Track');
+
+        // Update checkpoint list if in checkpoint mode
+        if (this.editor.editorMode === 'checkpoints') {
+          this.updateCheckpointList();
+        }
+
+        alert(`Track "${trackData.name || 'Imported Track'}" loaded successfully!`);
+        console.log('Track imported:', trackData);
+      } catch (error) {
+        alert('Error loading track file: ' + error.message);
+        console.error('Import error:', error);
+      }
+    };
+
+    reader.onerror = () => {
+      alert('Error reading file.');
+    };
+
+    reader.readAsText(file);
+
+    // Reset file input so the same file can be loaded again
+    event.target.value = '';
   }
 }

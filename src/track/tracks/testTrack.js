@@ -15,6 +15,28 @@ export const testTrack = {
   "name": "My Track",
   "width": 30,
   "height": 30,
+  "checkpoints": [
+    {
+      "position": { "x": -125, "y": 2, "z": -40 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "isFinishLine": true
+    },
+    {
+      "position": { "x": -75, "y": 2, "z": 5 },
+      "rotation": { "x": 0, "y": 1.5708, "z": 0 },
+      "isFinishLine": false
+    },
+    {
+      "position": { "x": -5, "y": 2, "z": 60 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "isFinishLine": false
+    },
+    {
+      "position": { "x": 75, "y": 2, "z": 5 },
+      "rotation": { "x": 0, "y": 1.5708, "z": 0 },
+      "isFinishLine": false
+    }
+  ],
   "layout": [
     [
       "grass",

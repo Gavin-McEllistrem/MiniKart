@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { getTile, TileRegistry } from './TileRegistry.js';
+import { CheckpointSystem } from './CheckpointSystem.js';
+import { Checkpoint } from '../entities/Checkpoint.js';
 
 /**
  * Track - Grid-based track system
@@ -12,6 +14,8 @@ export class Track {
     this.scene = scene;
     this.tileSize = options.tileSize ?? 10; // Size of each grid tile (10x10 units)
     this.trackData = options.trackData ?? []; // 2D array of tile IDs
+    this.checkpointsData = options.checkpointsData ?? []; // Array of checkpoint definitions
+    this.decorationsData = options.decorationsData ?? []; // Array of decoration definitions
 
     // Track metadata
     this.width = 0; // Number of tiles wide
@@ -23,6 +27,9 @@ export class Track {
     this.tileMeshes = [];
     this.trackGroup = new THREE.Group();
     this.scene.add(this.trackGroup);
+
+    // Checkpoint system
+    this.checkpointSystem = null;
 
     if (this.trackData.length > 0) {
       this.buildTrack();
@@ -82,6 +89,52 @@ export class Track {
     }
 
     console.log(`Track built: ${this.width}x${this.height} tiles`);
+
+    // Load checkpoints if provided
+    if (this.checkpointsData && this.checkpointsData.length > 0) {
+      this.loadCheckpoints();
+    }
+  }
+
+  /**
+   * Load checkpoints from checkpoint data
+   */
+  loadCheckpoints() {
+    // Create checkpoint system
+    this.checkpointSystem = new CheckpointSystem(this.scene);
+
+    // Add each checkpoint from data
+    for (const cpData of this.checkpointsData) {
+      // Convert rotation object to y-axis rotation value
+      const rotation = typeof cpData.rotation === 'object' ? cpData.rotation.y : cpData.rotation;
+
+      // Create position Vector3
+      const position = new THREE.Vector3(
+        cpData.position.x,
+        cpData.position.y,
+        cpData.position.z
+      );
+
+      // Create checkpoint directly with all options
+      const id = this.checkpointSystem.checkpoints.length;
+      const checkpoint = new Checkpoint(this.scene, {
+        id,
+        position,
+        rotation,
+        width: cpData.width ?? 20,
+        height: cpData.height ?? 10,
+        isFinishLine: cpData.isFinishLine ?? false
+      });
+
+      this.checkpointSystem.checkpoints.push(checkpoint);
+
+      console.log(`Checkpoint ${id} loaded: pos(${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)}), rot: ${(rotation * 180 / Math.PI).toFixed(1)}°, width: ${cpData.width ?? 20}`);
+    }
+
+    // Hide checkpoints by default (use H key to toggle)
+    this.checkpointSystem.setCheckpointsVisible(false);
+
+    console.log(`Loaded ${this.checkpointsData.length} checkpoints (hidden - press H to toggle)`);
   }
 
   /**
@@ -249,5 +302,11 @@ export class Track {
   destroy() {
     this.clearTrack();
     this.scene.remove(this.trackGroup);
+
+    // Destroy checkpoint system
+    if (this.checkpointSystem) {
+      this.checkpointSystem.destroy();
+      this.checkpointSystem = null;
+    }
   }
 }

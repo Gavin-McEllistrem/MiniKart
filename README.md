@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-A 3D arcade kart racing game built with Three.js, featuring Mario Kart-style controls with drift mechanics, a grid-based track system, and smooth camera following.
+A 3D arcade kart racing game built with Three.js, featuring Mario Kart-style controls with drift mechanics, a grid-based track system, checkpoint-based lap tracking, and a full visual map editor.
 
 ---
 
@@ -37,6 +37,7 @@ A 3D arcade kart racing game built with Three.js, featuring Mario Kart-style con
   - Green arrow = heading direction
   - Red arrow = actual movement direction
   - Shows drift mechanics clearly
+  - Checkpoint visibility toggle (H key)
 
 ### ✅ **Phase 2: Track System** (COMPLETE)
 
@@ -46,6 +47,7 @@ A 3D arcade kart racing game built with Three.js, featuring Mario Kart-style con
   - Multiple tile types (road, grass, dirt, wall, barrier, empty)
   - Each tile has collision and visual properties
   - Speed multipliers for off-road surfaces
+  - Independent object system for non-tile entities
 
 - **Tile Registry**:
   - Extensible tile definition system
@@ -70,12 +72,93 @@ A 3D arcade kart racing game built with Three.js, featuring Mario Kart-style con
   - Demonstrates all tile types
   - Start/finish line with checkered pattern
 
+### ✅ **Phase 3: Checkpoint System** (COMPLETE)
+
+**Implemented Systems:**
+- **CheckpointSystem**: Sequential checkpoint validation and lap tracking
+  - Per-kart progress tracking
+  - Sequential validation (prevents shortcuts)
+  - Lap timing with best lap tracking
+  - Finish line detection
+  - Next checkpoint highlighting
+  - EventBus integration for checkpoint/lap events
+
+- **Checkpoint Entity**:
+  - Vertical plane collision detection
+  - Configurable width and height
+  - Visual highlighting for next checkpoint
+  - Debug visibility toggle
+  - Finish line vs regular checkpoint distinction
+  - Efficient local-space collision calculation
+
+- **Lap Tracking**:
+  - Current lap time display
+  - Best lap time tracking
+  - Last lap time display
+  - Progress percentage
+  - Checkpoint counter (e.g., "2/3")
+
+- **Game Integration**:
+  - Checkpoint data loaded with tracks
+  - HUD displays lap info and progress
+  - Debug mode shows checkpoint planes
+  - Clean lap completion logic
+
+### ✅ **Phase 4: Map Editor** (COMPLETE)
+
+**Implemented Systems:**
+- **Visual Track Editor**:
+  - Grid-based tile placement
+  - Click and drag painting
+  - Real-time track preview
+  - Raycasting for mouse picking
+  - Tile highlight on hover
+  - Separate editor HTML page
+
+- **Tile Editing Mode**:
+  - Visual tile palette with previews
+  - All tile types available
+  - Click to select, click/drag to place
+  - Grid coordinates display
+  - Rotation support (currently for future use)
+
+- **Checkpoint Drawing Mode**:
+  - Click and drag to draw checkpoint lines
+  - Independent of tile grid (world coordinates)
+  - Real-time line preview while drawing
+  - Automatic width calculation from drawn line
+  - Finish line toggle option
+  - Visual checkpoint list with delete buttons
+  - Checkpoints stored as separate objects
+
+- **Editor Controls**:
+  - Undo/Redo system (50-step history)
+  - Clear track function
+  - Rotate tool (for future tile rotations)
+  - Mode switching (Tiles / Checkpoints)
+
+- **Track Management**:
+  - **Save to LocalStorage**: Browser-based track storage
+  - **Load from LocalStorage**: Track selection dialog
+  - **Export to JSON**: Download track file
+  - **Import from JSON**: Upload track file
+  - Track name input and validation
+  - Test track button (opens game in test mode)
+
+- **Independent Object System**:
+  - Checkpoints stored separately from tiles
+  - Position: world coordinates (x, y, z)
+  - Rotation: euler angles (x, y, z)
+  - Width/height: customizable dimensions
+  - Extensible for future decorations and objects
+
 ### ✅ **Core Architecture Refactor** (COMPLETE)
 
 **Modular Systems:**
 - **Game.js**: Core game loop and collision handling
   - Manages game state and entities
   - Handles wall collision and sliding
+  - Updates checkpoint system each frame
   - Provides clean API for game control
   - Extensible via update callbacks
 
@@ -94,14 +177,22 @@ A 3D arcade kart racing game built with Three.js, featuring Mario Kart-style con
 
 - **EventBus.js**: Event-driven communication
   - Decouples systems
-  - Events: boost-activated, drift-start/end, wall-hit
+  - Events: boost-activated, drift-start/end, wall-hit, checkpoint-reached, lap-completed
   - Easy to extend with new events
 
-**Clean main.js**:
-- ~230 lines (down from ~240)
-- Clear separation of concerns
-- Easy to understand initialization flow
-- HUD rendering separated from game logic
+- **MapEditor.js**: Visual track editor
+  - Grid-based tile editing
+  - Independent object placement (checkpoints)
+  - Undo/redo system
+  - Track serialization/deserialization
+  - Export/import JSON tracks
+
+- **EditorUI.js**: Editor interface management
+  - Tile palette rendering
+  - Mode switching controls
+  - Checkpoint list management
+  - File import/export handling
+  - Keyboard shortcuts
 
 ---
 

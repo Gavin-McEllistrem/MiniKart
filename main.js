@@ -85,7 +85,8 @@ function startGame(customTrackData = null) {
   const trackData = customTrackData || testTrack;
   const track = new Track(renderer.scene, {
     tileSize: 10,
-    trackData: trackData.layout
+    trackData: trackData.layout,
+    checkpointsData: trackData.checkpoints || []
   });
   game.setTrack(track);
 
@@ -182,6 +183,14 @@ function setupControls() {
       console.log('Debug vectors:', !currentlyVisible ? 'ON' : 'OFF');
     }
 
+    // Toggle checkpoint visibility (H key for "hitboxes")
+    if (key === 'h' && game.track && game.track.checkpointSystem) {
+      const checkpointSystem = game.track.checkpointSystem;
+      const currentlyVisible = checkpointSystem.checkpoints.length > 0 && checkpointSystem.checkpoints[0].mesh.visible;
+      checkpointSystem.setCheckpointsVisible(!currentlyVisible);
+      console.log('Checkpoint visibility:', !currentlyVisible ? 'ON' : 'OFF');
+    }
+
     // Toggle camera mode (C key)
     if (key === 'c' && chaseCamera) {
       if (chaseCamera.currentMode === 'chase') {
@@ -221,6 +230,14 @@ function setupEventListeners() {
 
   eventBus.on('wall-hit', (data) => {
     console.log(`Wall hit [${data.type}]:`, data);
+  });
+
+  eventBus.on('checkpoint-reached', (data) => {
+    console.log(`Checkpoint ${data.checkpointIndex + 1} reached!`);
+  });
+
+  eventBus.on('lap-completed', (data) => {
+    console.log(`Lap ${data.lapNumber} completed! Time: ${data.lapTime.toFixed(2)}s`);
   });
 }
 
@@ -281,12 +298,49 @@ function updateHUD() {
     }
   }
 
+  // Checkpoint and lap info
+  let checkpointInfo = '';
+  if (game.track && game.track.checkpointSystem) {
+    const cpSystem = game.track.checkpointSystem;
+    const progress = cpSystem.getProgress(player.id);
+    const lapTimes = cpSystem.getLapTimes(player.id);
+
+    if (progress) {
+      const currentCp = progress.checkpoint;
+      const totalCps = progress.totalCheckpoints;
+      const lapNum = progress.lap;
+      const progressPct = progress.percentage.toFixed(0);
+
+      checkpointInfo += `Lap: ${lapNum} | Checkpoint: ${currentCp}/${totalCps} (${progressPct}%)\n`;
+
+      // Current lap time
+      if (lapTimes) {
+        const kartState = cpSystem.kartStates.get(player.id);
+        if (kartState && kartState.lapStartTime > 0) {
+          const currentLapTime = (performance.now() - kartState.lapStartTime) / 1000;
+          checkpointInfo += `Current Lap: ${currentLapTime.toFixed(2)}s\n`;
+        }
+
+        // Best lap time
+        if (lapTimes.bestLapTime !== null && lapTimes.bestLapTime > 0) {
+          checkpointInfo += `Best Lap: ${lapTimes.bestLapTime.toFixed(2)}s\n`;
+        }
+
+        // Last lap time
+        if (lapTimes.lastLapTime !== null && lapTimes.lastLapTime > 0) {
+          checkpointInfo += `Last Lap: ${lapTimes.lastLapTime.toFixed(2)}s\n`;
+        }
+      }
+    }
+  }
+
   hudEl.textContent =
     `=== ${testTrack.name.toUpperCase()} ===\n` +
     `Speed: ${speed} m/s${driftStatus}${boostStatus}\n` +
     `Position: (${player.pos.x.toFixed(1)}, ${player.pos.z.toFixed(1)})\n` +
     `Heading: ${(player.heading * 180 / Math.PI).toFixed(0)}°\n` +
     `${surfaceInfo}\n` +
+    checkpointInfo +
     (player.isDrifting ? `Drift Angle: ${driftAngleDisplay}°\n` : ``) +
     (player.isDrifting ? `Drift: [${driftMeter}]${driftColor}\n` : ``) +
     `Camera: ${cameraMode}\n` +
@@ -299,6 +353,7 @@ function updateHUD() {
     `SPACE/SHIFT - Drift\n` +
     `C - Toggle Camera Mode\n` +
     `V - Toggle Debug Vectors\n` +
+    `H - Toggle Checkpoints\n` +
     `R - Reset Kart\n` +
     `\n` +
     `Yellow cone = FRONT\n` +

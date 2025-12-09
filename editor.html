@@ -25,6 +25,17 @@
         </div>
       </div>
 
+      <!-- Mode Selection -->
+      <div id="mode-selection">
+        <h4>Mode</h4>
+        <button id="mode-tiles-btn" class="editor-btn mode-btn active">
+          🧱 Tiles
+        </button>
+        <button id="mode-checkpoints-btn" class="editor-btn mode-btn">
+          🏁 Checkpoints
+        </button>
+      </div>
+
       <!-- Editor Controls -->
       <div id="editor-controls">
         <h4>Tools</h4>
@@ -42,13 +53,35 @@
         </button>
       </div>
 
+      <!-- Checkpoint Controls (shown in checkpoint mode) -->
+      <div id="checkpoint-controls" class="hidden">
+        <h4>Checkpoint Tools</h4>
+        <div class="info-box">
+          Click and drag to draw a checkpoint line
+        </div>
+        <button id="toggle-finish-line-btn" class="editor-btn">
+          Make Next Finish Line
+        </button>
+        <button id="clear-checkpoints-btn" class="editor-btn warning">
+          Clear All Checkpoints
+        </button>
+        <div id="checkpoint-list">
+          <h5>Checkpoints</h5>
+          <div id="checkpoint-items">
+            <!-- Checkpoints will be listed here -->
+          </div>
+        </div>
+      </div>
+
       <!-- Track Management -->
       <div id="track-controls">
         <h4>Track</h4>
         <input type="text" id="track-name" placeholder="Track Name" value="My Track" />
         <button id="test-btn" class="editor-btn primary">▶️ Test Track</button>
         <button id="save-btn" class="editor-btn">💾 Save</button>
-        <button id="load-btn" class="editor-btn">📂 Load</button>
+        <button id="load-btn" class="editor-btn">📂 Load Saved</button>
+        <button id="import-btn" class="editor-btn">📤 Import JSON</button>
+        <input type="file" id="file-input" accept=".json" style="display: none;" />
         <button id="export-btn" class="editor-btn">📥 Export JSON</button>
       </div>
 

@@ -19,6 +19,7 @@ export class MapEditor {
     this.scene = scene;
     this.camera = camera;
     this.renderer = renderer;
+    this.ui = null; // Will be set by EditorUI
 
     // Grid settings
     this.gridWidth = options.gridWidth ?? 30;
@@ -26,12 +27,23 @@ export class MapEditor {
     this.tileSize = options.tileSize ?? 10;
 
     // Editor state
+    this.editorMode = 'tiles'; // 'tiles', 'checkpoints', 'decorations'
     this.selectedTileType = 'straight';
     this.currentRotation = 0; // 0, 90, 180, 270
     this.isPlacing = false;
     this.isPainting = false; // Track if mouse is held down
     this.lastPaintedCell = { x: -1, z: -1 }; // Prevent painting same cell repeatedly
     this.trackName = 'My Track';
+
+    // Checkpoints and decorations (independent of tiling)
+    this.checkpoints = [];
+    this.decorations = [];
+    this.checkpointMeshes = []; // Visual representations of checkpoints
+
+    // Checkpoint drawing state
+    this.isDrawingCheckpoint = false;
+    this.checkpointStartPoint = null;
+    this.checkpointPreviewLine = null;
 
     // Grid data (2D array)
     this.grid = [];
@@ -139,37 +151,53 @@ export class MapEditor {
     const intersection = new THREE.Vector3();
 
     if (this.raycaster.ray.intersectPlane(plane, intersection)) {
-      // Convert to grid coordinates
-      const gridX = Math.floor((intersection.x + (this.gridWidth * this.tileSize) / 2) / this.tileSize);
-      const gridZ = Math.floor((intersection.z + (this.gridHeight * this.tileSize) / 2) / this.tileSize);
-
-      if (gridX >= 0 && gridX < this.gridWidth && gridZ >= 0 && gridZ < this.gridHeight) {
-        this.currentGridCell = { x: gridX, z: gridZ };
-
-        // Update highlight position
-        const worldX = (gridX - this.gridWidth / 2) * this.tileSize + this.tileSize / 2;
-        const worldZ = (gridZ - this.gridHeight / 2) * this.tileSize + this.tileSize / 2;
-
-        this.highlightMesh.position.x = worldX;
-        this.highlightMesh.position.z = worldZ;
-        this.highlightMesh.visible = true;
-
-        // Paint if mouse is held down and moved to new cell
-        if (this.isPainting && (gridX !== this.lastPaintedCell.x || gridZ !== this.lastPaintedCell.z)) {
-          this.placeTile(gridX, gridZ, this.selectedTileType, true); // true = skip undo push per tile
-          this.lastPaintedCell = { x: gridX, z: gridZ };
+      if (this.editorMode === 'checkpoints') {
+        // Checkpoint drawing mode
+        if (this.isDrawingCheckpoint && this.checkpointStartPoint) {
+          this.updateCheckpointPreview(intersection);
         }
 
-        // Emit event for UI update
+        // Emit world position for UI
         eventBus.emit('editor-grid-hover', {
-          gridX,
-          gridZ,
-          worldX,
-          worldZ
+          gridX: -1,
+          gridZ: -1,
+          worldX: intersection.x.toFixed(1),
+          worldZ: intersection.z.toFixed(1)
         });
       } else {
-        this.highlightMesh.visible = false;
-        this.currentGridCell = { x: -1, z: -1 };
+        // Tile editing mode
+        // Convert to grid coordinates
+        const gridX = Math.floor((intersection.x + (this.gridWidth * this.tileSize) / 2) / this.tileSize);
+        const gridZ = Math.floor((intersection.z + (this.gridHeight * this.tileSize) / 2) / this.tileSize);
+
+        if (gridX >= 0 && gridX < this.gridWidth && gridZ >= 0 && gridZ < this.gridHeight) {
+          this.currentGridCell = { x: gridX, z: gridZ };
+
+          // Update highlight position
+          const worldX = (gridX - this.gridWidth / 2) * this.tileSize + this.tileSize / 2;
+          const worldZ = (gridZ - this.gridHeight / 2) * this.tileSize + this.tileSize / 2;
+
+          this.highlightMesh.position.x = worldX;
+          this.highlightMesh.position.z = worldZ;
+          this.highlightMesh.visible = true;
+
+          // Paint if mouse is held down and moved to new cell
+          if (this.isPainting && (gridX !== this.lastPaintedCell.x || gridZ !== this.lastPaintedCell.z)) {
+            this.placeTile(gridX, gridZ, this.selectedTileType, true); // true = skip undo push per tile
+            this.lastPaintedCell = { x: gridX, z: gridZ };
+          }
+
+          // Emit event for UI update
+          eventBus.emit('editor-grid-hover', {
+            gridX,
+            gridZ,
+            worldX,
+            worldZ
+          });
+        } else {
+          this.highlightMesh.visible = false;
+          this.currentGridCell = { x: -1, z: -1 };
+        }
       }
     } else {
       this.highlightMesh.visible = false;
@@ -177,32 +205,41 @@ export class MapEditor {
   }
 
   /**
-   * Handle mouse down - start painting
+   * Handle mouse down - start painting or drawing checkpoint
    */
   onMouseDown(event) {
     // Only left click (button 0)
     if (event.button !== 0) return;
 
-    const { x: gridX, z: gridZ } = this.currentGridCell;
+    if (this.editorMode === 'checkpoints') {
+      // Start drawing checkpoint
+      this.startDrawingCheckpoint(event);
+    } else {
+      // Tile painting mode
+      const { x: gridX, z: gridZ } = this.currentGridCell;
 
-    if (gridX >= 0 && gridZ >= 0) {
-      this.isPainting = true;
-      this.lastPaintedCell = { x: gridX, z: gridZ };
+      if (gridX >= 0 && gridZ >= 0) {
+        this.isPainting = true;
+        this.lastPaintedCell = { x: gridX, z: gridZ };
 
-      // Push undo state at start of paint stroke
-      this.pushUndo();
+        // Push undo state at start of paint stroke
+        this.pushUndo();
 
-      this.placeTile(gridX, gridZ, this.selectedTileType, true);
+        this.placeTile(gridX, gridZ, this.selectedTileType, true);
+      }
     }
   }
 
   /**
-   * Handle mouse up - stop painting
+   * Handle mouse up - stop painting or finish checkpoint
    */
   onMouseUp(event) {
     if (event.button !== 0) return;
 
-    if (this.isPainting) {
+    if (this.editorMode === 'checkpoints' && this.isDrawingCheckpoint) {
+      // Finish drawing checkpoint
+      this.finishDrawingCheckpoint(event);
+    } else if (this.isPainting) {
       this.isPainting = false;
       this.lastPaintedCell = { x: -1, z: -1 };
     }
@@ -332,6 +369,212 @@ export class MapEditor {
   }
 
   /**
+   * Set editor mode
+   */
+  setEditorMode(mode) {
+    this.editorMode = mode;
+    eventBus.emit('editor-mode-changed', { mode });
+  }
+
+  /**
+   * Start drawing a checkpoint line
+   */
+  startDrawingCheckpoint(event) {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+    this.raycaster.setFromCamera(this.mouse, this.camera);
+    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const intersection = new THREE.Vector3();
+
+    if (this.raycaster.ray.intersectPlane(plane, intersection)) {
+      this.isDrawingCheckpoint = true;
+      this.checkpointStartPoint = intersection.clone();
+
+      // Create preview line
+      const geometry = new THREE.BufferGeometry().setFromPoints([
+        intersection.clone(),
+        intersection.clone()
+      ]);
+      const material = new THREE.LineBasicMaterial({
+        color: 0x00ff00,
+        linewidth: 3
+      });
+      this.checkpointPreviewLine = new THREE.Line(geometry, material);
+      this.scene.add(this.checkpointPreviewLine);
+    }
+  }
+
+  /**
+   * Update checkpoint preview line while dragging
+   */
+  updateCheckpointPreview(endPoint) {
+    if (!this.checkpointPreviewLine || !this.checkpointStartPoint) return;
+
+    const points = [
+      this.checkpointStartPoint.clone(),
+      endPoint.clone()
+    ];
+
+    this.checkpointPreviewLine.geometry.setFromPoints(points);
+  }
+
+  /**
+   * Finish drawing checkpoint
+   */
+  finishDrawingCheckpoint(event) {
+    if (!this.isDrawingCheckpoint || !this.checkpointStartPoint) return;
+
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+    this.raycaster.setFromCamera(this.mouse, this.camera);
+    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const endPoint = new THREE.Vector3();
+
+    if (this.raycaster.ray.intersectPlane(plane, endPoint)) {
+      // Calculate checkpoint center, rotation, and width from line
+      const center = new THREE.Vector3().addVectors(this.checkpointStartPoint, endPoint).multiplyScalar(0.5);
+      const direction = new THREE.Vector3().subVectors(endPoint, this.checkpointStartPoint);
+      const width = direction.length();
+
+      // Only create checkpoint if line is long enough
+      if (width > 2) {
+        // Rotation should align the checkpoint plane WITH the drawn line (not perpendicular)
+        // atan2(z, x) gives the angle of the line in the XZ plane
+        const rotation = Math.atan2(direction.z, direction.x);
+
+        this.addCheckpointFromLine(center, rotation, width, false);
+      }
+    }
+
+    // Clean up preview
+    if (this.checkpointPreviewLine) {
+      this.scene.remove(this.checkpointPreviewLine);
+      this.checkpointPreviewLine.geometry.dispose();
+      this.checkpointPreviewLine.material.dispose();
+      this.checkpointPreviewLine = null;
+    }
+
+    this.isDrawingCheckpoint = false;
+    this.checkpointStartPoint = null;
+  }
+
+  /**
+   * Add checkpoint from line drawing
+   */
+  addCheckpointFromLine(center, rotation, width, isFinishLine = false) {
+    // Check if UI wants this to be a finish line
+    if (this.ui && this.ui.nextIsFinishLine) {
+      isFinishLine = true;
+      // Reset the flag after using it
+      this.ui.nextIsFinishLine = false;
+      this.ui.toggleFinishLineBtn.textContent = 'Make Next Finish Line';
+      this.ui.toggleFinishLineBtn.classList.remove('primary');
+    }
+
+    const checkpoint = {
+      id: this.checkpoints.length,
+      position: { x: center.x, y: 2, z: center.z },
+      rotation: { x: 0, y: rotation, z: 0 },
+      width: width,
+      height: 10,
+      isFinishLine
+    };
+
+    this.checkpoints.push(checkpoint);
+    this.renderCheckpoint(checkpoint);
+    eventBus.emit('checkpoint-added', { checkpoint });
+
+    console.log(`Checkpoint added at (${center.x.toFixed(1)}, ${center.z.toFixed(1)}), width: ${width.toFixed(1)}, rotation: ${(rotation * 180 / Math.PI).toFixed(1)}°, ${isFinishLine ? 'FINISH LINE' : 'checkpoint'}`);
+
+    return checkpoint;
+  }
+
+  /**
+   * Render checkpoint visual in editor
+   */
+  renderCheckpoint(checkpoint) {
+    const geometry = new THREE.PlaneGeometry(checkpoint.width, checkpoint.height);
+    const material = new THREE.MeshBasicMaterial({
+      color: checkpoint.isFinishLine ? 0xff0000 : 0x00ff00,
+      transparent: true,
+      opacity: 0.4,
+      side: THREE.DoubleSide
+    });
+
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(checkpoint.position.x, checkpoint.position.y + checkpoint.height / 2, checkpoint.position.z);
+    // Negate rotation to correct for coordinate system when rendering
+    mesh.rotation.y = -checkpoint.rotation.y;
+
+    // Add edges for visibility
+    const edgesGeometry = new THREE.EdgesGeometry(geometry);
+    const edgesMaterial = new THREE.LineBasicMaterial({
+      color: checkpoint.isFinishLine ? 0xff0000 : 0x00ff00,
+      linewidth: 2
+    });
+    const edges = new THREE.LineSegments(edgesGeometry, edgesMaterial);
+    mesh.add(edges);
+
+    // Store reference
+    mesh.userData.checkpointId = checkpoint.id;
+    this.checkpointMeshes.push(mesh);
+    this.scene.add(mesh);
+  }
+
+  /**
+   * Re-render all checkpoints
+   */
+  renderAllCheckpoints() {
+    // Clear existing checkpoint meshes
+    this.checkpointMeshes.forEach(mesh => {
+      this.scene.remove(mesh);
+      mesh.geometry.dispose();
+      mesh.material.dispose();
+    });
+    this.checkpointMeshes = [];
+
+    // Render all checkpoints
+    this.checkpoints.forEach(cp => this.renderCheckpoint(cp));
+  }
+
+  /**
+   * Add checkpoint at position (legacy method for compatibility)
+   */
+  addCheckpoint(position, rotation = 0, isFinishLine = false) {
+    const checkpoint = {
+      id: this.checkpoints.length,
+      position: { x: position.x, y: position.y, z: position.z },
+      rotation: { x: 0, y: rotation, z: 0 },
+      width: 20,
+      height: 10,
+      isFinishLine
+    };
+    this.checkpoints.push(checkpoint);
+    this.renderCheckpoint(checkpoint);
+    eventBus.emit('checkpoint-added', { checkpoint });
+    return checkpoint;
+  }
+
+  /**
+   * Remove checkpoint by ID
+   */
+  removeCheckpoint(id) {
+    const index = this.checkpoints.findIndex(cp => cp.id === id);
+    if (index !== -1) {
+      this.checkpoints.splice(index, 1);
+      // Reindex
+      this.checkpoints.forEach((cp, i) => {
+        cp.id = i;
+      });
+      eventBus.emit('checkpoint-removed', { id });
+    }
+  }
+
+  /**
    * Serialize track to JSON
    */
   serializeTrack() {
@@ -339,7 +582,9 @@ export class MapEditor {
       name: this.trackName,
       width: this.gridWidth,
       height: this.gridHeight,
-      layout: this.cloneGrid()
+      layout: this.cloneGrid(),
+      checkpoints: this.checkpoints,
+      decorations: this.decorations
     };
   }
 
@@ -351,6 +596,17 @@ export class MapEditor {
     this.gridWidth = trackData.width;
     this.gridHeight = trackData.height;
     this.grid = trackData.layout.map(row => [...row]);
+
+    // Load checkpoints if present
+    if (trackData.checkpoints) {
+      this.checkpoints = trackData.checkpoints.map(cp => ({...cp}));
+      this.renderAllCheckpoints();
+    }
+
+    // Load decorations if present
+    if (trackData.decorations) {
+      this.decorations = trackData.decorations.map(dec => ({...dec}));
+    }
 
     this.renderGrid();
     eventBus.emit('editor-track-loaded', { trackName: this.trackName });
@@ -446,6 +702,23 @@ export class MapEditor {
     if (this.track) {
       this.track.destroy();
     }
+
+    // Clean up checkpoint meshes
+    this.checkpointMeshes.forEach(mesh => {
+      this.scene.remove(mesh);
+      mesh.geometry.dispose();
+      mesh.material.dispose();
+    });
+    this.checkpointMeshes = [];
+
+    // Clean up preview line if exists
+    if (this.checkpointPreviewLine) {
+      this.scene.remove(this.checkpointPreviewLine);
+      this.checkpointPreviewLine.geometry.dispose();
+      this.checkpointPreviewLine.material.dispose();
+      this.checkpointPreviewLine = null;
+    }
+
     this.scene.remove(this.gridHelper);
     this.scene.remove(this.highlightMesh);
   }
