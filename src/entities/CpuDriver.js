@@ -9,11 +9,11 @@ import { getTile } from '../track/TileRegistry.js';
  */
 export class CpuDriver {
   constructor(options = {}) {
-    this.targetSpeedFactor = options.targetSpeedFactor ?? 1; // % of kart max speed
+    this.targetSpeedFactor = options.targetSpeedFactor ?? 100; // % of kart max speed (faster CPU)
     this.cornerSlowdownAngle = options.cornerSlowdownAngle ?? 1.2; // radians before slowing
     this.lookAhead = options.lookAhead ?? 6; // meters past checkpoint center
-    this.brakeAggression = options.brakeAggression ?? 0.6;
-    this.maxThrottle = options.maxThrottle ?? 1.0;
+    this.brakeAggression = options.brakeAggression ?? 0.4;
+    this.maxThrottle = options.maxThrottle ?? 90;
     this.driftEnabled = options.driftEnabled ?? false; // Disable heavy drifting by default
 
     // Precomputed waypoint path (tile centers) that visits checkpoints in order
@@ -22,8 +22,8 @@ export class CpuDriver {
     this.segmentLengths = [];
     this.totalPathLength = 0;
     this.pathCursor = 0; // distance along path
-    this.targetLeadDistance = options.targetLeadDistance ?? 50; // distance ahead of kart to place target on path
-    this.lateralSlowdownThreshold = options.lateralSlowdownThreshold ?? 3.5;
+    this.targetLeadDistance = options.targetLeadDistance ?? 35; // distance ahead of kart to place target on path
+    this.lateralSlowdownThreshold = options.lateralSlowdownThreshold ?? 10;
     this.stuckSpeedThreshold = options.stuckSpeedThreshold ?? 0.6;
     this.stuckTimeThreshold = options.stuckTimeThreshold ?? 0.8;
     this.reverseDuration = options.reverseDuration ?? 0.9;
@@ -140,9 +140,9 @@ export class CpuDriver {
       0,
       1
     );
-    const baseMax = kart.controller.maxSpeed * this.targetSpeedFactor;
+    const baseMax = (kart.controller.maxSpeed * this.targetSpeedFactor) + 500000;
     const lateralFactor = lateralError > this.lateralSlowdownThreshold
-      ? THREE.MathUtils.clamp(1 - (lateralError - this.lateralSlowdownThreshold) * 0.25, 0.3, 1)
+      ? THREE.MathUtils.clamp(1 - (lateralError - this.lateralSlowdownThreshold) * 0.05, 0.8, 1)
       : 1;
     const targetSpeed = baseMax * (1 - 0.55 * cornerFactor) * lateralFactor;
 
