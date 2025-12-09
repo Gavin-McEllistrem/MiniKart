@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Mini Kart 3D – Group 1234</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="ui">
+    <div id="group-id">Mini Kart 3D – Group 1234</div>
+    <button id="mode-btn">Mode: Prototype</button>
+  </div>
+
+  <div id="hud"></div>
+
+  <!-- Map Editor UI -->
+  <div id="editor-ui" class="hidden">
+    <div id="editor-toolbar">
+      <h3>Map Editor</h3>
+
+      <!-- Tile Palette -->
+      <div id="tile-palette">
+        <h4>Tiles</h4>
+        <div id="tile-grid">
+          <!-- Tiles will be populated by JS -->
+        </div>
+      </div>
+
+      <!-- Editor Controls -->
+      <div id="editor-controls">
+        <h4>Tools</h4>
+        <button id="rotate-btn" class="editor-btn" title="Rotate tile (R)">
+          🔄 Rotate
+        </button>
+        <button id="undo-btn" class="editor-btn" title="Undo (Ctrl+Z)">
+          ↶ Undo
+        </button>
+        <button id="redo-btn" class="editor-btn" title="Redo (Ctrl+Y)">
+          ↷ Redo
+        </button>
+        <button id="clear-btn" class="editor-btn warning" title="Clear entire track">
+          🗑️ Clear
+        </button>
+      </div>
+
+      <!-- Track Management -->
+      <div id="track-controls">
+        <h4>Track</h4>
+        <input type="text" id="track-name" placeholder="Track Name" value="My Track" />
+        <button id="test-btn" class="editor-btn primary">▶️ Test Track</button>
+        <button id="save-btn" class="editor-btn">💾 Save</button>
+        <button id="load-btn" class="editor-btn">📂 Load</button>
+        <button id="export-btn" class="editor-btn">📥 Export JSON</button>
+      </div>
+
+      <!-- Grid Info -->
+      <div id="grid-info">
+        <h4>Grid Info</h4>
+        <div>Cursor: <span id="grid-coords">--</span></div>
+        <div>Selected: <span id="selected-tile">None</span></div>
+        <div>Rotation: <span id="rotation-display">0°</span></div>
+      </div>
+
+      <!-- Mode Toggle -->
+      <div id="mode-toggle">
+        <button id="exit-editor-btn" class="editor-btn warning">
+          ❌ Exit Editor
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Menu -->
+  <div id="main-menu">
+    <h1>Mini Kart 3D</h1>
+    <div id="menu-buttons">
+      <button id="play-btn" class="menu-btn primary">▶️ Play</button>
+      <button id="editor-btn" class="menu-btn">🛠️ Map Editor</button>
+    </div>
+  </div>
+
+  <div id="touch-controls">
+    <div class="control-row">
+      <button class="ctrl-btn" data-action="up">↑</button>
+    </div>
+    <div class="control-row">
+      <button class="ctrl-btn" data-action="left">←</button>
+      <button class="ctrl-btn" data-action="down">↓</button>
+      <button class="ctrl-btn" data-action="right">→</button>
+    </div>
+  </div>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+    </script>
+  <!-- Main module script -->
+  <script type="module" src="main.js"></script>
+</body>
+</html>
