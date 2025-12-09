@@ -113,7 +113,8 @@ function startGame(customTrackData = null) {
     id: 'cpu-1',
     isPlayer: false,
     color: 0x3a86ff,
-    mode: 'prototype'
+    mode: 'prototype',
+    maxSpeed: 8000
   });
 
   // Offset the CPU kart slightly so it doesn't overlap the player on spawn

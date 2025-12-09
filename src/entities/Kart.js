@@ -170,7 +170,7 @@ export class Kart {
     // Update state from controller result
     this.pos = result.position;
     this.heading = result.heading;
-    this.speed = result.speed+5000;
+    this.speed = result.speed;
     this.isDrifting = result.isDrifting;
     this.boostActive = result.boostActive;
     this.driftCharge = result.driftCharge || 0;

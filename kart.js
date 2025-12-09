@@ -11,7 +11,7 @@ export class Kart {
     this.heading = 0; // radians
     this.speed = 0;
 
-    this.maxSpeed = 40;
+    this.maxSpeed = options.maxSpeed ?? 40;
     this.accel = 25;
     this.brake = 40;
     this.friction = 10;
