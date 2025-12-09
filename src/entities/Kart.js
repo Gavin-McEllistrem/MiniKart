@@ -18,6 +18,7 @@ export class Kart {
     this.color = options.color ?? 0xff4444;
     this.mode = options.mode ?? "prototype";
     this.renderMode = options.renderMode ?? 'prototype';
+    this.modelVariant = options.modelVariant || 'ferrari'; // ferrari | audi
 
     // Transform
     this.pos = new THREE.Vector3(0, 0.5, 0);
@@ -31,6 +32,9 @@ export class Kart {
 
     // Visual mesh
     if (this.renderMode === 'full') {
+      // Start with procedural mesh so we have a visible kart and collider, then swap to glTF when ready
+      this.mesh = this._buildFormulaGroup('full');
+      this.scene.add(this.mesh);
       this._useGltfModel();
     } else {
       this.mesh = this._buildFormulaGroup(this.renderMode);
@@ -53,6 +57,7 @@ export class Kart {
 
     // Debug vectors
     this.debugVectors = this._createDebugVectors();
+    this._loadingModel = false;
   }
 
   /**
@@ -100,9 +105,10 @@ export class Kart {
    */
   _buildFormulaGroup(renderMode = 'prototype') {
     const group = new THREE.Group();
+    const sf = renderMode === 'full' ? 1.5 : 1.0;
 
-    // Chassis base
-    const baseGeom = new THREE.BoxGeometry(2.4, 0.6, 4.4);
+    // Chassis base (slightly larger)
+    const baseGeom = new THREE.BoxGeometry(2.6 * sf, 0.65 * sf, 4.8 * sf);
     const baseMat = this._createBodyMaterial(renderMode);
     const base = new THREE.Mesh(baseGeom, baseMat);
     base.position.y = 0.45;
@@ -112,7 +118,7 @@ export class Kart {
     this.bodyMesh = base;
 
     // Nose cone
-    const noseGeom = new THREE.CylinderGeometry(0.35, 0.65, 1.6, 16);
+    const noseGeom = new THREE.CylinderGeometry(0.4 * sf, 0.75 * sf, 1.8 * sf, 16);
     const noseMat = this._createBodyMaterial(renderMode);
     const nose = new THREE.Mesh(noseGeom, noseMat);
     nose.rotation.x = Math.PI / 2;
@@ -121,7 +127,7 @@ export class Kart {
     group.add(nose);
 
     // Cockpit/halo
-    const cockpitGeom = new THREE.CylinderGeometry(0.35, 0.5, 1.2, 12);
+    const cockpitGeom = new THREE.CylinderGeometry(0.4 * sf, 0.6 * sf, 1.4 * sf, 12);
     const cockpitMat = new THREE.MeshStandardMaterial({ color: 0x1b1f2a, metalness: 0.45, roughness: 0.35 });
     const cockpit = new THREE.Mesh(cockpitGeom, cockpitMat);
     cockpit.rotation.x = Math.PI / 2;
@@ -131,7 +137,7 @@ export class Kart {
     this.coneMesh = cockpit;
 
     // Front wing
-    const fwGeom = new THREE.BoxGeometry(3.4, 0.15, 0.9);
+    const fwGeom = new THREE.BoxGeometry(3.8 * sf, 0.18 * sf, 1.0 * sf);
     const fwMat = this._createBodyMaterial(renderMode);
     const frontWing = new THREE.Mesh(fwGeom, fwMat);
     frontWing.position.set(0, 0.25, 3.0);
@@ -139,7 +145,7 @@ export class Kart {
     group.add(frontWing);
 
     // Rear wing
-    const rwGeom = new THREE.BoxGeometry(2.6, 0.25, 0.6);
+    const rwGeom = new THREE.BoxGeometry(3.0 * sf, 0.3 * sf, 0.7 * sf);
     const rwMat = this._createBodyMaterial(renderMode);
     const rearWing = new THREE.Mesh(rwGeom, rwMat);
     rearWing.position.set(0, 0.95, -2.5);
@@ -147,7 +153,7 @@ export class Kart {
     group.add(rearWing);
 
     // Side pods
-    const podGeom = new THREE.BoxGeometry(0.6, 0.45, 1.8);
+    const podGeom = new THREE.BoxGeometry(0.7 * sf, 0.5 * sf, 2.0 * sf);
     const podMat = this._createBodyMaterial(renderMode);
     const leftPod = new THREE.Mesh(podGeom, podMat);
     leftPod.position.set(-1.5, 0.55, -0.5);
@@ -158,14 +164,14 @@ export class Kart {
     group.add(rightPod);
 
     // Engine cover
-    const coverGeom = new THREE.BoxGeometry(1.2, 0.7, 2.0);
+    const coverGeom = new THREE.BoxGeometry(1.4 * sf, 0.8 * sf, 2.2 * sf);
     const cover = new THREE.Mesh(coverGeom, this._createBodyMaterial(renderMode));
     cover.position.set(0, 0.9, -1.2);
     cover.castShadow = true;
     group.add(cover);
 
     // Wheels
-    const wheelGeom = new THREE.CylinderGeometry(0.6, 0.6, 0.65, 20);
+    const wheelGeom = new THREE.CylinderGeometry(0.8 * sf, 0.8 * sf, 0.8 * sf, 20);
     const wheelMat = this._createWheelMaterial(renderMode);
 
     const wheelPositions = [
@@ -231,7 +237,7 @@ export class Kart {
     this._wasDrifting = this.isDrifting;
 
     // Animate front wheels based on steering
-    if (this.wheels && inputs.steer !== undefined) {
+    if (this.wheels && this.wheels.length >= 2 && inputs.steer !== undefined) {
       const wheelAngle = -(inputs.steer * 0.4); // Visual steering angle
       this.wheels[0].rotation.y = wheelAngle; // Front left
       this.wheels[1].rotation.y = wheelAngle; // Front right
@@ -339,11 +345,14 @@ export class Kart {
     if (mode !== 'prototype' && mode !== 'full') return;
     if (this.renderMode === mode) return;
     this.renderMode = mode;
-    // rebuild mesh for new mode
-    this.scene.remove(this.mesh);
     if (mode === 'full') {
+      if (this.mesh) this.scene.remove(this.mesh);
+      this.mesh = this._buildFormulaGroup('full');
+      this.scene.add(this.mesh);
       this._useGltfModel();
     } else {
+      // Switch back to procedural
+      if (this.mesh) this.scene.remove(this.mesh);
       this.mesh = this._buildFormulaGroup(mode);
       this.scene.add(this.mesh);
     }
@@ -407,6 +416,88 @@ export class Kart {
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.set(2, 2);
     return texture;
+  }
+
+  /**
+   * Load external glTF formula car (from assets) and use it as the mesh.
+   */
+  _useGltfModel() {
+    if (this._loadingModel) return;
+    this._loadingModel = true;
+    const loader = this.modelVariant === 'audi' ? Kart._loadAudiModel : Kart._loadFerrariModel;
+    loader().then((model) => {
+      const cloned = model.clone(true);
+      this._fitAndAssignModel(cloned);
+      this._loadingModel = false;
+    }).catch((err) => {
+      console.error('Failed to load glTF car, falling back to procedural', err);
+      this._loadingModel = false;
+      // keep existing mesh (procedural) as fallback
+    });
+  }
+
+  _fitAndAssignModel(model) {
+    // Center and scale to roughly the same footprint as our procedural car
+    const box = new THREE.Box3().setFromObject(model);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const targetLen = 9.75; // large presence for glTF models (full mode)
+    const maxDim = Math.max(size.x, size.z);
+    const scale = maxDim > 0.0001 ? targetLen / maxDim : 1;
+    model.scale.setScalar(scale);
+
+    // Recenter
+    box.setFromObject(model);
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+    model.position.sub(center); // center at origin
+
+    // Apply current pose
+    model.position.add(this.pos);
+    model.rotation.y = this.heading;
+    // We won't drive wheel rotations for external models; just ensure shadows
+    this.wheels = [];
+    model.traverse((child) => {
+      if (child.isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
+    });
+
+    const oldMesh = this.mesh;
+    this.mesh = model;
+    this.scene.add(this.mesh);
+    if (oldMesh) {
+      this.scene.remove(oldMesh);
+    }
+  }
+
+  static _loadFerrariModel() {
+    if (Kart._gltfFerrari) return Kart._gltfFerrari;
+    const loader = new GLTFLoader();
+    Kart._gltfFerrari = new Promise((resolve, reject) => {
+      loader.load(
+        'assets/2019_f1_ferrari_sf90/scene.gltf',
+        (gltf) => resolve(gltf.scene),
+        undefined,
+        reject
+      );
+    });
+    return Kart._gltfFerrari;
+  }
+
+  static _loadAudiModel() {
+    if (Kart._gltfAudi) return Kart._gltfAudi;
+    const loader = new GLTFLoader();
+    Kart._gltfAudi = new Promise((resolve, reject) => {
+      loader.load(
+        'assets/audi_f1_2026_livery_textured/scene.gltf',
+        (gltf) => resolve(gltf.scene),
+        undefined,
+        reject
+      );
+    });
+    return Kart._gltfAudi;
   }
 }
 

@@ -29,6 +29,8 @@ export class Track {
     this.trackGroup = new THREE.Group();
     this.scene.add(this.trackGroup);
     this.materialCache = new Map();
+    this.textureCache = new Map();
+    this.textureLoader = new THREE.TextureLoader();
 
     // Checkpoint system
     this.checkpointSystem = null;
@@ -214,6 +216,18 @@ export class Track {
    * Generate simple procedural textures for tiles
    */
   _createTileTexture(tile) {
+    // Try to use external textures when available
+    if (this.renderMode === 'full') {
+      if (tile.type === 'road' || tile.id === 'start_finish') {
+        const tex = this._getImageTexture('assets/asphalt.jpg');
+        if (tex) return tex;
+      }
+      if (tile.id === 'wall' || tile.id === 'barrier') {
+        const tex = this._getImageTexture('assets/wall.jpg');
+        if (tex) return tex;
+      }
+    }
+
     const canvas = document.createElement('canvas');
     canvas.width = 128;
     canvas.height = 128;
@@ -290,6 +304,25 @@ export class Track {
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.set(1, 1);
     return texture;
+  }
+
+  /**
+   * Load and cache an image texture
+   */
+  _getImageTexture(path) {
+    if (this.textureCache.has(path)) {
+      return this.textureCache.get(path);
+    }
+    try {
+      const tex = this.textureLoader.load(path);
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(1, 1);
+      this.textureCache.set(path, tex);
+      return tex;
+    } catch (e) {
+      console.warn('Failed to load texture', path, e);
+      return null;
+    }
   }
 
   /**

@@ -109,7 +109,8 @@ function startGame(customTrackData = null) {
     isPlayer: true,
     color: 0xff5555,
     mode: 'prototype',
-    renderMode
+    renderMode,
+    modelVariant: 'ferrari'
   });
   player.pos.copy(startTransform.position);
   player.heading = startTransform.heading;
@@ -123,7 +124,8 @@ function startGame(customTrackData = null) {
     isPlayer: false,
     color: 0x3a86ff,
     mode: 'prototype',
-    renderMode
+    renderMode,
+    modelVariant: 'audi'
   });
 
   // Offset the CPU kart slightly so it doesn't overlap the player on spawn
@@ -162,7 +164,6 @@ function startGame(customTrackData = null) {
 
   modeBtn.style.display = 'inline-block';
   updateModeButton();
-  updateCpuDebugButton();
 
   // Show appropriate return button
   const returnBtn = document.createElement('button');
@@ -408,7 +409,6 @@ function updateHUD() {
     `H - Toggle Checkpoints\n` +
     `R - Reset Kart\n` +
     `\n` +
-    `Yellow cone = FRONT\n` +
     `Green arrow = Heading\n` +
     `Red arrow = Movement`;
 }
@@ -426,7 +426,6 @@ function toggleCpuDebug(visible) {
   if (cpu?.aiDriver) {
     cpu.aiDriver.setDebugVisible(game.track, visible);
   }
-  updateCpuDebugButton();
 }
 
 // Mode toggle UI
