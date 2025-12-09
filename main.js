@@ -1,4 +1,6 @@
+import * as THREE from "three";
 import { Kart } from "./src/entities/Kart.js";
+import { CpuDriver } from "./src/entities/CpuDriver.js";
 import { Camera } from "./src/entities/Camera.js";
 import { InputManager } from "./src/core/InputManager.js";
 import { Game } from "./src/core/Game.js";
@@ -102,7 +104,34 @@ function startGame(customTrackData = null) {
   });
   player.pos.copy(startTransform.position);
   player.heading = startTransform.heading;
+  player.mesh.position.copy(player.pos);
+  player.mesh.rotation.y = player.heading;
   game.setPlayer(player);
+
+  // Create a simple CPU kart to race against the player
+  const cpuKart = new Kart(renderer.scene, {
+    id: 'cpu-1',
+    isPlayer: false,
+    color: 0x3a86ff,
+    mode: 'prototype'
+  });
+
+  // Offset the CPU kart slightly so it doesn't overlap the player on spawn
+  const offset = new THREE.Vector3(2, 0, -3);
+  const rotatedOffset = new THREE.Vector3(
+    offset.x * Math.cos(startTransform.heading) - offset.z * Math.sin(startTransform.heading),
+    0,
+    offset.x * Math.sin(startTransform.heading) + offset.z * Math.cos(startTransform.heading)
+  );
+  cpuKart.pos.copy(startTransform.position).add(rotatedOffset);
+  cpuKart.heading = startTransform.heading;
+  cpuKart.mesh.position.copy(cpuKart.pos);
+  cpuKart.mesh.rotation.y = cpuKart.heading;
+  cpuKart.aiDriver = new CpuDriver({
+    targetSpeedFactor: 0.9,
+    cornerSlowdownAngle: 1.0
+  });
+  game.addKart(cpuKart);
 
   // Create chase camera
   chaseCamera = new Camera(renderer.camera, {

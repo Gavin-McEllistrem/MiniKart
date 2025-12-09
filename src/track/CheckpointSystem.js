@@ -194,6 +194,23 @@ export class CheckpointSystem {
   }
 
   /**
+   * Get the next checkpoint a kart should aim for
+   * @param {string} kartId
+   * @returns {Checkpoint|null}
+   */
+  getNextCheckpointFor(kartId) {
+    if (this.checkpoints.length === 0) return null;
+
+    if (!this.kartStates.has(kartId)) {
+      this.initKart(kartId);
+    }
+
+    const state = this.kartStates.get(kartId);
+    const index = Math.min(state.nextCheckpointIndex, this.checkpoints.length - 1);
+    return this.checkpoints[index];
+  }
+
+  /**
    * Clear all checkpoints
    */
   clearCheckpoints() {

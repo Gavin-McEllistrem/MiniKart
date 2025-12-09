@@ -243,8 +243,7 @@ export class Track {
    */
   getTileAtPosition(position) {
     // Convert world position to grid coordinates
-    const col = Math.floor((position.x + this.width * this.tileSize / 2) / this.tileSize);
-    const row = Math.floor((position.z + this.height * this.tileSize / 2) / this.tileSize);
+    const { row, col } = this.worldToGrid(position) ?? { row: -1, col: -1 };
 
     // Check bounds
     if (row < 0 || row >= this.height || col < 0 || col >= this.width) {
@@ -283,6 +282,36 @@ export class Track {
   getSpeedMultiplier(position) {
     const tile = this.getTileAtPosition(position);
     return tile?.speedMultiplier ?? 1.0;
+  }
+
+  /**
+   * Convert a world position to grid coordinates
+   * @param {THREE.Vector3} position
+   * @returns {{row: number, col: number}|null}
+   */
+  worldToGrid(position) {
+    const col = Math.floor((position.x + (this.width * this.tileSize) / 2) / this.tileSize);
+    const row = Math.floor((position.z + (this.height * this.tileSize) / 2) / this.tileSize);
+
+    if (row < 0 || row >= this.height || col < 0 || col >= this.width) {
+      return null;
+    }
+
+    return { row, col };
+  }
+
+  /**
+   * Convert grid coordinates to world center position
+   * @param {number} row
+   * @param {number} col
+   * @returns {THREE.Vector3|null}
+   */
+  gridToWorld(row, col) {
+    if (row < 0 || row >= this.height || col < 0 || col >= this.width) return null;
+
+    const x = (col - this.width / 2) * this.tileSize + this.tileSize / 2;
+    const z = (row - this.height / 2) * this.tileSize + this.tileSize / 2;
+    return new THREE.Vector3(x, 0.5, z);
   }
 
   /**

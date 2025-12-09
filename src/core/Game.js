@@ -21,6 +21,7 @@ export class Game {
     this.track = null;
     this.camera = null;
     this.inputManager = null;
+    this.karts = [];
 
     // Game state
     this.isRunning = false;
@@ -36,6 +37,7 @@ export class Game {
    */
   setPlayer(player) {
     this.player = player;
+    this._registerKart(player);
   }
 
   /**
@@ -57,6 +59,22 @@ export class Game {
    */
   setInputManager(inputManager) {
     this.inputManager = inputManager;
+  }
+
+  /**
+   * Register a non-player kart (e.g. CPU opponent)
+   */
+  addKart(kart) {
+    this._registerKart(kart);
+  }
+
+  /**
+   * Internal helper to avoid duplicate registration
+   */
+  _registerKart(kart) {
+    if (!this.karts.includes(kart)) {
+      this.karts.push(kart);
+    }
   }
 
   /**
@@ -89,33 +107,53 @@ export class Game {
 
     const delta = this.clock.getDelta();
 
-    if (this.player && this.inputManager) {
-      // Get input state
-      const inputs = this.inputManager.getState();
+    if (this.karts.length === 0) {
+      return;
+    }
 
-      // Check track surface for speed multiplier
-      if (this.track) {
-        const speedMultiplier = this.track.getSpeedMultiplier(this.player.pos);
-        inputs.speedMultiplier = speedMultiplier;
+    // Cache player input once per frame
+    const playerInputs = (this.player && this.inputManager)
+      ? this.inputManager.getState()
+      : null;
+
+    for (const kart of this.karts) {
+      let inputs = {};
+
+      if (kart.isPlayer) {
+        if (!playerInputs) continue;
+        inputs = { ...playerInputs };
+      } else if (kart.aiDriver) {
+        inputs = kart.aiDriver.getInputs({
+          kart,
+          track: this.track,
+          delta
+        });
+      } else {
+        // No control source for this kart
+        continue;
       }
 
-      // Store previous position for collision handling
-      const prevPos = this.player.pos.clone();
+      // Apply surface speed multiplier
+      if (this.track) {
+        inputs.speedMultiplier = this.track.getSpeedMultiplier(kart.pos);
+      }
 
-      // Update player physics
-      this.player.step(delta, inputs);
+      const prevPos = kart.pos.clone();
+
+      // Update physics
+      kart.step(delta, inputs);
 
       // Handle collisions
-      this.handleCollisions(prevPos);
+      this.handleCollisions(kart, prevPos);
 
       // Update checkpoint system
       if (this.track && this.track.checkpointSystem) {
-        this.track.checkpointSystem.update(this.player.id, this.player.pos);
+        this.track.checkpointSystem.update(kart.id, kart.pos);
       }
 
-      // Update camera
-      if (this.camera) {
-        this.camera.update(delta, this.player);
+      // Only the player drives the camera
+      if (kart.isPlayer && this.camera) {
+        this.camera.update(delta, kart);
       }
     }
 
@@ -128,38 +166,38 @@ export class Game {
   /**
    * Handle wall collisions and sliding
    */
-  handleCollisions(prevPos) {
+  handleCollisions(kart, prevPos) {
     if (!this.track) return;
 
     // Check for wall collision
-    if (this.track.isOutOfBounds(this.player.pos)) {
+    if (this.track.isOutOfBounds(kart.pos)) {
       // Hit a wall - try sliding along it
-      const slidePos = this.tryWallSlide(prevPos, this.player.pos);
+      const slidePos = this.tryWallSlide(prevPos, kart.pos);
 
       if (slidePos) {
         // Successfully found a slide position
-        this.player.pos.copy(slidePos);
-        this.player.mesh.position.copy(slidePos);
+        kart.pos.copy(slidePos);
+        kart.mesh.position.copy(slidePos);
         // Reduce speed when hitting wall
-        this.player.speed *= this.wallSlideSpeedPenalty;
-        this.player.controller.speed *= this.wallSlideSpeedPenalty;
+        kart.speed *= this.wallSlideSpeedPenalty;
+        kart.controller.speed *= this.wallSlideSpeedPenalty;
 
         eventBus.emit('wall-hit', {
-          kartId: this.player.id,
+          kartId: kart.id,
           type: 'slide',
-          speed: this.player.speed
+          speed: kart.speed
         });
       } else {
         // Can't slide, just stop
-        this.player.pos.copy(prevPos);
-        this.player.speed *= this.wallStopSpeedPenalty;
-        this.player.controller.speed *= this.wallStopSpeedPenalty;
-        this.player.mesh.position.copy(prevPos);
+        kart.pos.copy(prevPos);
+        kart.speed *= this.wallStopSpeedPenalty;
+        kart.controller.speed *= this.wallStopSpeedPenalty;
+        kart.mesh.position.copy(prevPos);
 
         eventBus.emit('wall-hit', {
-          kartId: this.player.id,
+          kartId: kart.id,
           type: 'stop',
-          speed: this.player.speed
+          speed: kart.speed
         });
       }
     }
@@ -229,5 +267,7 @@ export class Game {
   destroy() {
     this.stop();
     this.updateCallbacks = [];
+    this.karts = [];
+    this.player = null;
   }
 }
