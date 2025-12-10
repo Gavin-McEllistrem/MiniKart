@@ -24,6 +24,7 @@ export class Kart {
     this.pos = new THREE.Vector3(0, 0.5, 0);
     this.heading = 0; // radians
     this.speed = 0;
+    this.meshYOffset = 0; // vertical offset for visual mesh grounding
 
     // Arcade controller (simple Mario Kart style)
     this.controller = new ArcadeController({
@@ -262,7 +263,7 @@ export class Kart {
     );
 
     // Update visual mesh
-    this.mesh.position.copy(this.pos);
+    this.mesh.position.set(this.pos.x, this.pos.y + this.meshYOffset, this.pos.z);
 
     // Apply drift angle for visual effect
     // When drifting right (+), kart angles LEFT (inward)
@@ -345,6 +346,7 @@ export class Kart {
     if (mode !== 'prototype' && mode !== 'full') return;
     if (this.renderMode === mode) return;
     this.renderMode = mode;
+    this.meshYOffset = 0;
     if (mode === 'full') {
       if (this.mesh) this.scene.remove(this.mesh);
       this.mesh = this._buildFormulaGroup('full');
@@ -452,9 +454,20 @@ export class Kart {
     box.getCenter(center);
     model.position.sub(center); // center at origin
 
+    // Raise so the lowest point sits just above local y=0 to avoid clipping into the track
+    box.setFromObject(model);
+    const minY = box.min.y;
+    const rideHeight = (-minY) + 0.05; // small clearance above the ground plane
+    model.position.y += rideHeight;
+    this.meshYOffset = 0;
+
+    // Wrap model in a container so we keep local offsets while moving the kart each frame
+    const container = new THREE.Group();
+    container.add(model);
+
     // Apply current pose
-    model.position.add(this.pos);
-    model.rotation.y = this.heading;
+    container.position.set(this.pos.x, this.pos.y + this.meshYOffset, this.pos.z);
+    container.rotation.y = this.heading;
     // We won't drive wheel rotations for external models; just ensure shadows
     this.wheels = [];
     model.traverse((child) => {
@@ -465,7 +478,7 @@ export class Kart {
     });
 
     const oldMesh = this.mesh;
-    this.mesh = model;
+    this.mesh = container;
     this.scene.add(this.mesh);
     if (oldMesh) {
       this.scene.remove(oldMesh);
