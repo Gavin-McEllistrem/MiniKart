@@ -140,26 +140,30 @@ function startGame(customTrackData = null) {
   const directionField = track.getDirectionField();
   const cpuColors = [0x3a86ff, 0xff006e, 0x06ffa5, 0xffbe0b, 0x8338ec, 0xfb5607, 0x06d6a0];
   for (let i = 0; i < cpuColors.length; i++) {
-    const maxSpeed = 45 + Math.random() * 2;
-    const acceleration = 40 + Math.random() * (maxSpeed - 40);
-    const turnSpeed = 1.8 + Math.random() * 0.2;
+    // Make bots visibly different: large stat spread and alternating models
+    const maxSpeed = 20 + Math.random() * 50; // 20-70
+    const acceleration = 12 + Math.random() * 40; // 12-52
+    const turnSpeed = 0.8 + Math.random() * 1.8; // 0.8-2.6
+    const color = cpuColors[i % cpuColors.length];
+    const variant = 'audi'; // keep all CPUs on the same model for consistent lift
 
     const cpuKart = new Kart(renderer.scene, {
       id: `cpu-${i + 1}`,
       isPlayer: false,
-      color: cpuColors[i],
+      color,
       mode: 'prototype',
       renderMode,
       maxSpeed,
       acceleration,
       turnSpeed,
-      modelVariant: 'audi'
+      modelVariant: variant
     });
 
-    // Offset spawn in small grid behind player
-    const row = Math.floor(i / 3);
-    const col = i % 3;
-    const offset = new THREE.Vector3((col - 1) * 3, 0, -3 - row * 3);
+    // Offset spawn positions along the start line (stay on grid but spread laterally/longitudinally)
+    const spacing = (track.tileSize || 10);
+    const lateral = (Math.random() - 0.5) * spacing * 4; // spread left/right across the line
+    const back = (i + Math.random() * 0.8) * spacing * 2; // stagger back along the heading
+    const offset = new THREE.Vector3(lateral, 0, -back);
     const rotatedOffset = new THREE.Vector3(
       offset.x * Math.cos(startTransform.heading) - offset.z * Math.sin(startTransform.heading),
       0,
@@ -172,15 +176,15 @@ function startGame(customTrackData = null) {
 
     if (directionField) {
       cpuKart.aiDriver = new WaypointAI(cpuKart, directionField, {
-        targetDistance: 10,
-        updateInterval: 10,
-        steeringStrength: 1.0,
-        maxSpeed: 1.0,
-        minSpeed: 0.3
+        targetDistance: 6 + Math.random() * 16,      // 6-22
+        updateInterval: 4 + Math.floor(Math.random() * 10), // 4-13 frames
+        steeringStrength: 0.6 + Math.random() * 1.0, // 0.6-1.6
+        maxSpeed: 0.6 + Math.random() * 1.4,         // throttle scale 0.6-2.0
+        minSpeed: 0.15 + Math.random() * 0.6         // 0.15-0.75
       });
     } else {
       cpuKart.aiDriver = new CpuDriver({
-        targetSpeedFactor: 0.9,
+        targetSpeedFactor: 0.5 + Math.random() * 0.8, // 0.5-1.3
         cornerSlowdownAngle: 1.0
       });
     }

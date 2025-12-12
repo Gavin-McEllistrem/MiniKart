@@ -39,6 +39,7 @@ export class Kart {
       this._useGltfModel();
     } else {
       this.mesh = this._buildFormulaGroup(this.renderMode);
+      this.mesh.position.y += this._getBotYOffset();
       this.scene.add(this.mesh);
     }
 
@@ -59,13 +60,6 @@ export class Kart {
     // Debug vectors
     this.debugVectors = this._createDebugVectors();
     this._loadingModel = false;
-  }
-
-  _getBotYOffset() {
-    if (!this.isPlayer && this.renderMode === 'full') {
-      return 0.8;
-    }
-    return 0;
   }
 
   /**
@@ -352,6 +346,12 @@ export class Kart {
    */
   destroy() {
     this.scene.remove(this.mesh);
+  }
+
+  _getBotYOffset() {
+    if (this.isPlayer) return 0;
+    // Lift CPU karts in both modes; higher in full mode to clear GLTF geometry
+    return this.renderMode === 'full' ? 1.2 : 0.6;
   }
 
   /**
