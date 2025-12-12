@@ -141,8 +141,8 @@ function startGame(customTrackData = null) {
   const cpuColors = [0x3a86ff, 0xff006e, 0x06ffa5, 0xffbe0b, 0x8338ec, 0xfb5607, 0x06d6a0];
   for (let i = 0; i < cpuColors.length; i++) {
     // Make bots visibly different: large stat spread and alternating models
-    const maxSpeed = 20 + Math.random() * 50; // 20-70
-    const acceleration = 12 + Math.random() * 40; // 12-52
+    const maxSpeed = 15 + Math.random() * 65; // 15-80
+    const acceleration = 8 + Math.random() * 55; // 8-63
     const turnSpeed = 0.8 + Math.random() * 1.8; // 0.8-2.6
     const color = cpuColors[i % cpuColors.length];
     const variant = 'audi'; // keep all CPUs on the same model for consistent lift
@@ -179,12 +179,12 @@ function startGame(customTrackData = null) {
         targetDistance: 6 + Math.random() * 16,      // 6-22
         updateInterval: 4 + Math.floor(Math.random() * 10), // 4-13 frames
         steeringStrength: 0.6 + Math.random() * 1.0, // 0.6-1.6
-        maxSpeed: 0.6 + Math.random() * 1.4,         // throttle scale 0.6-2.0
-        minSpeed: 0.15 + Math.random() * 0.6         // 0.15-0.75
+        maxSpeed: 0.4 + Math.random() * 2.0,         // throttle scale 0.4-2.4
+        minSpeed: 0.1 + Math.random() * 0.8          // 0.1-0.9
       });
     } else {
       cpuKart.aiDriver = new CpuDriver({
-        targetSpeedFactor: 0.5 + Math.random() * 0.8, // 0.5-1.3
+        targetSpeedFactor: 0.3 + Math.random() * 1.2, // 0.3-1.5
         cornerSlowdownAngle: 1.0
       });
     }
