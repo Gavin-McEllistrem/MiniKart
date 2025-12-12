@@ -37,6 +37,29 @@ html, body {
     border-radius: 4px;
     cursor: pointer;
   }
+
+  .mode-toggle-btn {
+    background: #222;
+    border: 2px solid #888;
+    color: #fff;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+    transition: all 0.3s;
+  }
+
+  .mode-toggle-btn:hover {
+    background: #333;
+    border-color: #aaa;
+  }
+
+  .mode-toggle-btn.full-mode {
+    background: #1a472a;
+    border-color: #4CAF50;
+    color: #4CAF50;
+  }
   
   #hud {
     position: absolute;
@@ -196,6 +219,106 @@ html, body {
     display: block;
     font-size: 12px;
     color: #ccc;
+  }
+
+  /* Object Palette */
+  #object-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    margin-bottom: 15px;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+
+  .object-option {
+    padding: 10px;
+    background: #222;
+    border: 2px solid #444;
+    border-radius: 6px;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.2s;
+  }
+
+  .object-option:hover {
+    background: #333;
+    border-color: #666;
+  }
+
+  .object-option.selected {
+    border-color: #4CAF50;
+    background: #2a4a2a;
+  }
+
+  .object-option canvas {
+    width: 100%;
+    height: 60px;
+    margin-bottom: 5px;
+  }
+
+  .object-option span {
+    display: block;
+    font-size: 12px;
+    color: #ccc;
+  }
+
+  .object-item,
+  .waypoint-item {
+    padding: 8px;
+    background: #222;
+    border: 1px solid #444;
+    border-radius: 4px;
+    margin: 5px 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .delete-object-btn,
+  .delete-waypoint-btn {
+    background: #d32f2f;
+    border: 1px solid #b71c1c;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+  }
+
+  .delete-object-btn:hover,
+  .delete-waypoint-btn:hover {
+    background: #f44336;
+  }
+
+  .button-row {
+    display: flex;
+    gap: 5px;
+  }
+
+  .button-row .editor-btn {
+    flex: 1;
+  }
+
+  .mode-btn.active {
+    background: #2a4a2a;
+    border-color: #4CAF50;
+  }
+
+  .info-box {
+    background: #1a1a1a;
+    border: 1px solid #333;
+    padding: 8px;
+    border-radius: 6px;
+    margin: 6px 0;
+    font-size: 13px;
+    color: #cbd5e1;
+  }
+
+  .info-text {
+    color: #aaa;
+    font-size: 13px;
+    padding: 6px 0;
   }
 
   /* Editor Buttons */

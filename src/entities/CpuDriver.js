@@ -9,11 +9,11 @@ import { getTile } from '../track/TileRegistry.js';
  */
 export class CpuDriver {
   constructor(options = {}) {
-    this.targetSpeedFactor = options.targetSpeedFactor ?? 100; // % of kart max speed (faster CPU)
+    this.targetSpeedFactor = options.targetSpeedFactor ?? 1.0; // ratio of kart max speed
     this.cornerSlowdownAngle = options.cornerSlowdownAngle ?? 1.2; // radians before slowing
     this.lookAhead = options.lookAhead ?? 6; // meters past checkpoint center
     this.brakeAggression = options.brakeAggression ?? 0.4;
-    this.maxThrottle = options.maxThrottle ?? 90;
+    this.maxThrottle = options.maxThrottle ?? 1.0;
     this.driftEnabled = options.driftEnabled ?? false; // Disable heavy drifting by default
 
     // Precomputed waypoint path (tile centers) that visits checkpoints in order
@@ -140,7 +140,7 @@ export class CpuDriver {
       0,
       1
     );
-    const baseMax = (kart.controller.maxSpeed * this.targetSpeedFactor) + 500000;
+    const baseMax = kart.controller.maxSpeed * this.targetSpeedFactor;
     const lateralFactor = lateralError > this.lateralSlowdownThreshold
       ? THREE.MathUtils.clamp(1 - (lateralError - this.lateralSlowdownThreshold) * 0.05, 0.8, 1)
       : 1;

@@ -15,6 +15,7 @@ export class Game {
   constructor(scene, options = {}) {
     this.scene = scene;
     this.clock = new THREE.Clock();
+    this._frameCount = 0;
 
     // Game entities
     this.player = null;
@@ -115,15 +116,15 @@ export class Game {
       return;
     }
 
-    // Cache player input once per frame
-    const playerInputs = (this.player && this.inputManager)
-      ? this.inputManager.getState()
-      : null;
+      // Cache player input once per frame
+      const playerInputs = (this.player && this.inputManager)
+        ? this.inputManager.getState()
+        : null;
 
-    for (const kart of this.karts) {
-      let inputs = {};
+      for (const kart of this.karts) {
+        let inputs = {};
 
-      if (kart.isPlayer) {
+        if (kart.isPlayer) {
         if (!playerInputs) continue;
         inputs = { ...playerInputs };
       } else if (kart.aiDriver) {
@@ -142,7 +143,11 @@ export class Game {
         inputs.speedMultiplier = this.track.getSpeedMultiplier(kart.pos);
       }
 
-      const prevPos = kart.pos.clone();
+      if (!kart._prevPosCache) {
+        kart._prevPosCache = new THREE.Vector3();
+      }
+      kart._prevPosCache.copy(kart.pos);
+      const prevPos = kart._prevPosCache;
 
       // Update physics
       kart.step(delta, inputs);
@@ -150,11 +155,13 @@ export class Game {
       // Handle collisions
       this.handleCollisions(kart, prevPos);
 
-      // Update checkpoint system and check win
+      // Update checkpoint system (throttle for non-player karts)
       if (this.track && this.track.checkpointSystem) {
-        const result = this.track.checkpointSystem.update(kart.id, kart.pos);
-        if (result?.type === 'lap') {
-          this._checkWin(kart.id, result.lapNumber);
+        if (kart.isPlayer || this._frameCount % 3 === 0) {
+          const result = this.track.checkpointSystem.update(kart.id, kart.pos);
+          if (result?.type === 'lap') {
+            this._checkWin(kart.id, result.lapNumber);
+          }
         }
       }
 
@@ -163,6 +170,8 @@ export class Game {
         this.camera.update(delta, kart);
       }
     }
+
+    this._frameCount = (this._frameCount + 1) >>> 0;
 
     // Call custom update callbacks
     for (const callback of this.updateCallbacks) {

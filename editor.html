@@ -8,6 +8,7 @@
 <body>
   <div id="ui">
     <div id="group-id">Map Editor - Mini Kart 3D</div>
+    <button id="render-mode-btn" class="mode-toggle-btn">🎨 Prototype Mode</button>
   </div>
 
   <div id="hud"></div>
@@ -34,11 +35,27 @@
         <button id="mode-checkpoints-btn" class="editor-btn mode-btn">
           🏁 Checkpoints
         </button>
+        <button id="mode-waypoints-btn" class="editor-btn mode-btn">
+          📍 Waypoints
+        </button>
+        <button id="mode-decorations-btn" class="editor-btn mode-btn">
+          🌲 Decorations
+        </button>
       </div>
 
       <!-- Editor Controls -->
       <div id="editor-controls">
         <h4>Tools</h4>
+        <div class="button-row">
+          <label for="brush-size-slider">Brush Size: <span id="brush-size-value">1</span></label>
+          <input type="range" id="brush-size-slider" min="1" max="5" value="1" step="1">
+        </div>
+        <div class="button-row">
+          <label>
+            <input type="checkbox" id="auto-tile-toggle" checked>
+            Auto-Tile
+          </label>
+        </div>
         <button id="rotate-btn" class="editor-btn" title="Rotate tile (R)">
           🔄 Rotate
         </button>
@@ -73,6 +90,63 @@
         </div>
       </div>
 
+      <!-- Waypoint Controls (shown in waypoint mode) -->
+      <div id="waypoint-controls" class="hidden">
+        <h4>Waypoint Tools</h4>
+        <div class="info-box">
+          Click to place waypoints in order. AI will follow the path created.
+        </div>
+        <button id="clear-waypoints-btn" class="editor-btn warning">
+          Clear All Waypoints
+        </button>
+        <button id="visualize-field-btn" class="editor-btn">
+          👁️ Visualize Direction Field
+        </button>
+        <div id="waypoint-list">
+          <h5>Waypoints (<span id="waypoint-count">0</span>)</h5>
+          <div id="waypoint-items">
+            <!-- Waypoints will be listed here -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Decoration Controls (shown in decoration mode) -->
+      <div id="decoration-controls" class="hidden">
+        <h4>Object Palette</h4>
+        <div id="object-grid">
+          <!-- Objects will be populated by JS -->
+        </div>
+        <h4>Transform Tools</h4>
+        <div class="info-box">
+          Click to place selected object
+        </div>
+        <div class="button-row">
+          <button id="rotate-object-left-btn" class="editor-btn" title="Rotate 45° left">
+            ↶ Rotate
+          </button>
+          <button id="rotate-object-right-btn" class="editor-btn" title="Rotate 45° right">
+            ↷ Rotate
+          </button>
+        </div>
+        <div class="button-row">
+          <button id="scale-down-btn" class="editor-btn" title="Scale down 20%">
+            🔽 Scale -
+          </button>
+          <button id="scale-up-btn" class="editor-btn" title="Scale up 20%">
+            🔼 Scale +
+          </button>
+        </div>
+        <button id="clear-objects-btn" class="editor-btn warning">
+          Clear All Objects
+        </button>
+        <div id="object-list">
+          <h5>Placed Objects</h5>
+          <div id="object-items">
+            <!-- Objects will be listed here -->
+          </div>
+        </div>
+      </div>
+
       <!-- Track Management -->
       <div id="track-controls">
         <h4>Track</h4>
@@ -91,6 +165,7 @@
         <div>Cursor: <span id="grid-coords">--</span></div>
         <div>Selected: <span id="selected-tile">None</span></div>
         <div>Rotation: <span id="rotation-display">0°</span></div>
+        <div>Scale: <span id="scale-display">1.00x</span></div>
       </div>
 
       <!-- Mode Toggle -->

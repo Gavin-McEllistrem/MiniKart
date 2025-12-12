@@ -3,10 +3,40 @@ import { MapEditor } from './src/editor/MapEditor.js';
 import { EditorUI } from './src/editor/EditorUI.js';
 import { Renderer } from './src/core/Renderer.js';
 import { eventBus } from './src/utils/EventBus.js';
+import { RenderConfig } from './src/config/RenderConfig.js';
 
 /**
  * Editor Mode Entry Point
  */
+
+// Check URL params for render mode
+const urlParams = new URLSearchParams(window.location.search);
+const renderMode = urlParams.get('render') || 'prototype';
+RenderConfig.setMode(renderMode);
+
+// Setup render mode toggle button
+const renderModeBtn = document.getElementById('render-mode-btn');
+if (renderModeBtn) {
+  updateRenderModeButton();
+  renderModeBtn.addEventListener('click', () => {
+    const newMode = RenderConfig.getMode() === 'prototype' ? 'full' : 'prototype';
+    const url = new URL(window.location);
+    url.searchParams.set('render', newMode);
+    window.location.href = url.toString();
+  });
+}
+
+function updateRenderModeButton() {
+  if (!renderModeBtn) return;
+  const mode = RenderConfig.getMode();
+  if (mode === 'full') {
+    renderModeBtn.textContent = '✨ Full Mode';
+    renderModeBtn.classList.add('full-mode');
+  } else {
+    renderModeBtn.textContent = '🎨 Prototype Mode';
+    renderModeBtn.classList.remove('full-mode');
+  }
+}
 
 let renderer;
 let mapEditor;
@@ -14,6 +44,7 @@ let editorUI;
 
 function initEditor() {
   console.log('=== EDITOR MODE INITIALIZED ===');
+  console.log(`Render Mode: ${renderMode.toUpperCase()}`);
 
   // Create renderer
   renderer = new Renderer({
@@ -62,9 +93,8 @@ function initEditor() {
     editorUI.updateTrackName(trackData.name);
   }
 
-  // Hide game HUD and UI
+  // Hide game HUD and touch controls (keep top bar for render toggle)
   document.getElementById('hud').classList.add('hidden');
-  document.getElementById('ui').classList.add('hidden');
   document.getElementById('touch-controls').classList.add('hidden');
   document.getElementById('main-menu').classList.add('hidden');
 
@@ -92,7 +122,7 @@ function setupEditorEvents() {
     sessionStorage.setItem('testTrack', JSON.stringify(data.trackData));
 
     // Redirect to main game
-    window.location.href = 'index.html?mode=test';
+    window.location.href = `index.html?mode=test&render=${RenderConfig.getMode()}`;
   });
 }
 
@@ -102,11 +132,34 @@ function setupEditorEvents() {
 function animate() {
   requestAnimationFrame(animate);
 
+  if (mapEditor?.update) {
+    mapEditor.update();
+  }
+
   // Update orbit controls
   renderer.updateOrbitControls();
 
+  updatePerformanceHUD();
+
   // Render scene
   renderer.render();
+}
+
+function updatePerformanceHUD() {
+  const hudEl = document.getElementById('hud');
+  if (!hudEl || !mapEditor?.getCullingStats) return;
+
+  const stats = mapEditor.getCullingStats();
+  if (stats) {
+    hudEl.textContent =
+      `=== EDITOR PERFORMANCE ===\n` +
+      `Total Objects: ${stats.total}\n` +
+      `Visible: ${stats.visible}\n` +
+      `Culled: ${stats.culled} (${stats.cullPercentage}%)\n` +
+      `\n` +
+      `Use mouse wheel to zoom\n` +
+      `Right-click drag to pan`;
+  }
 }
 
 // Initialize editor on load

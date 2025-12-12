@@ -1,4 +1,5 @@
 import { TileRegistry } from '../track/TileRegistry.js';
+import { ObjectRegistry, getCategories } from '../objects/ObjectRegistry.js';
 import { eventBus } from '../utils/EventBus.js';
 import { MapEditor } from './MapEditor.js';
 
@@ -17,13 +18,18 @@ export class EditorUI {
     this.gridCoordsSpan = document.getElementById('grid-coords');
     this.selectedTileSpan = document.getElementById('selected-tile');
     this.rotationDisplay = document.getElementById('rotation-display');
+    this.scaleDisplay = document.getElementById('scale-display');
     this.trackNameInput = document.getElementById('track-name');
 
     // Mode elements
     this.modeTilesBtn = document.getElementById('mode-tiles-btn');
     this.modeCheckpointsBtn = document.getElementById('mode-checkpoints-btn');
+    this.modeWaypointsBtn = document.getElementById('mode-waypoints-btn');
+    this.modeDecorationsBtn = document.getElementById('mode-decorations-btn');
     this.tilePalette = document.getElementById('tile-palette');
     this.checkpointControls = document.getElementById('checkpoint-controls');
+    this.waypointControls = document.getElementById('waypoint-controls');
+    this.decorationControls = document.getElementById('decoration-controls');
 
     // Buttons
     this.rotateBtn = document.getElementById('rotate-btn');
@@ -43,11 +49,32 @@ export class EditorUI {
     this.clearCheckpointsBtn = document.getElementById('clear-checkpoints-btn');
     this.checkpointItemsDiv = document.getElementById('checkpoint-items');
 
+    // Waypoint buttons
+    this.clearWaypointsBtn = document.getElementById('clear-waypoints-btn');
+    this.visualizeFieldBtn = document.getElementById('visualize-field-btn');
+    this.waypointItemsDiv = document.getElementById('waypoint-items');
+    this.waypointCountSpan = document.getElementById('waypoint-count');
+
+    // Decoration buttons
+    this.objectGrid = document.getElementById('object-grid');
+    this.rotateObjectLeftBtn = document.getElementById('rotate-object-left-btn');
+    this.rotateObjectRightBtn = document.getElementById('rotate-object-right-btn');
+    this.scaleUpBtn = document.getElementById('scale-up-btn');
+    this.scaleDownBtn = document.getElementById('scale-down-btn');
+    this.clearObjectsBtn = document.getElementById('clear-objects-btn');
+    this.objectItemsDiv = document.getElementById('object-items');
+
+    // Brush controls
+    this.brushSizeSlider = document.getElementById('brush-size-slider');
+    this.brushSizeValue = document.getElementById('brush-size-value');
+    this.autoTileToggle = document.getElementById('auto-tile-toggle');
+
     // Checkpoint state
     this.nextIsFinishLine = false;
 
     // Initialize
     this.setupTilePalette();
+    this.setupObjectPalette();
     this.setupEventListeners();
     this.setupEditorEvents();
   }
@@ -89,21 +116,46 @@ export class EditorUI {
       canvas.height = 60;
       const ctx = canvas.getContext('2d');
 
-      // Draw tile preview
-      ctx.fillStyle = `#${tile.color.toString(16).padStart(6, '0')}`;
-      ctx.fillRect(0, 0, 100, 60);
+      // If tile has a texture, load and draw it
+      if (tile.texture) {
+        const img = new Image();
+        img.onload = () => {
+          // Draw texture to fill canvas
+          ctx.drawImage(img, 0, 0, 100, 60);
 
-      // Add border
-      ctx.strokeStyle = '#444';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(0, 0, 100, 60);
+          // Add border
+          ctx.strokeStyle = '#444';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(0, 0, 100, 60);
+        };
+        img.onerror = () => {
+          // Fallback to color if texture fails to load
+          ctx.fillStyle = `#${tile.color.toString(16).padStart(6, '0')}`;
+          ctx.fillRect(0, 0, 100, 60);
 
-      // Add special patterns
-      if (tile.hasCheckeredPattern) {
-        this.drawCheckeredPattern(ctx, 100, 60);
-      }
-      if (tile.hasStripes) {
-        this.drawStripePattern(ctx, 100, 60);
+          // Add border
+          ctx.strokeStyle = '#444';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(0, 0, 100, 60);
+        };
+        img.src = tile.texture;
+      } else {
+        // Draw tile preview with color
+        ctx.fillStyle = `#${tile.color.toString(16).padStart(6, '0')}`;
+        ctx.fillRect(0, 0, 100, 60);
+
+        // Add border
+        ctx.strokeStyle = '#444';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(0, 0, 100, 60);
+
+        // Add special patterns
+        if (tile.hasCheckeredPattern) {
+          this.drawCheckeredPattern(ctx, 100, 60);
+        }
+        if (tile.hasStripes) {
+          this.drawStripePattern(ctx, 100, 60);
+        }
       }
 
       // Add tile name
@@ -122,6 +174,91 @@ export class EditorUI {
 
     // Select default tile
     this.selectTile('straight');
+  }
+
+  /**
+   * Setup object palette with all available 3D objects
+   */
+  setupObjectPalette() {
+    this.objectGrid.innerHTML = '';
+
+    for (const key in ObjectRegistry) {
+      const obj = ObjectRegistry[key];
+
+      // Create object option
+      const option = document.createElement('div');
+      option.className = 'object-option';
+      option.dataset.objectType = obj.id;
+
+      // Create preview canvas
+      const canvas = document.createElement('canvas');
+      canvas.width = 100;
+      canvas.height = 60;
+      const ctx = canvas.getContext('2d');
+
+      // Draw simple colored preview
+      ctx.fillStyle = `#${obj.prototypeColor.toString(16).padStart(6, '0')}`;
+
+      // Draw shape based on geometry type
+      if (obj.prototypeGeometry === 'cone') {
+        // Draw triangle for cone
+        ctx.beginPath();
+        ctx.moveTo(50, 10);
+        ctx.lineTo(20, 50);
+        ctx.lineTo(80, 50);
+        ctx.closePath();
+        ctx.fill();
+      } else if (obj.prototypeGeometry === 'sphere') {
+        // Draw circle
+        ctx.beginPath();
+        ctx.arc(50, 30, 20, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        // Draw rectangle
+        ctx.fillRect(25, 15, 50, 30);
+      }
+
+      // Add border
+      ctx.strokeStyle = '#444';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(0, 0, 100, 60);
+
+      // Add object name
+      const label = document.createElement('span');
+      label.textContent = obj.name;
+
+      option.appendChild(canvas);
+      option.appendChild(label);
+      this.objectGrid.appendChild(option);
+
+      // Click handler
+      option.addEventListener('click', () => {
+        this.selectObject(obj.id);
+      });
+    }
+
+    // Select default object
+    this.selectObject('tree_pine');
+  }
+
+  /**
+   * Select an object type
+   */
+  selectObject(objectType) {
+    // Update UI
+    document.querySelectorAll('.object-option').forEach(el => {
+      el.classList.remove('selected');
+      if (el.dataset.objectType === objectType) {
+        el.classList.add('selected');
+      }
+    });
+
+    // Update editor
+    this.editor.setSelectedObject(objectType);
+
+    // Update displays
+    this.updateRotationDisplay();
+    this.updateScaleDisplay();
   }
 
   /**
@@ -179,6 +316,14 @@ export class EditorUI {
       this.switchMode('checkpoints');
     });
 
+    this.modeWaypointsBtn.addEventListener('click', () => {
+      this.switchMode('waypoints');
+    });
+
+    this.modeDecorationsBtn.addEventListener('click', () => {
+      this.switchMode('decorations');
+    });
+
     // Checkpoint controls
     this.toggleFinishLineBtn.addEventListener('click', () => {
       this.nextIsFinishLine = !this.nextIsFinishLine;
@@ -194,6 +339,59 @@ export class EditorUI {
         this.editor.renderAllCheckpoints();
         this.updateCheckpointList();
       }
+    });
+
+    // Waypoint controls
+    this.clearWaypointsBtn.addEventListener('click', () => {
+      if (confirm('Clear all waypoints?')) {
+        this.editor.clearWaypoints();
+        this.updateWaypointList();
+      }
+    });
+
+    this.visualizeFieldBtn.addEventListener('click', () => {
+      this.visualizeDirectionField();
+    });
+
+    // Decoration controls
+    this.rotateObjectLeftBtn.addEventListener('click', () => {
+      this.editor.rotateObject(-Math.PI / 4); // Rotate 45° left
+      this.updateRotationDisplay();
+    });
+
+    this.rotateObjectRightBtn.addEventListener('click', () => {
+      this.editor.rotateObject(Math.PI / 4); // Rotate 45° right
+      this.updateRotationDisplay();
+    });
+
+    this.scaleUpBtn.addEventListener('click', () => {
+      this.editor.scaleObject(1.2); // Scale up by 20%
+      this.updateScaleDisplay();
+    });
+
+    this.scaleDownBtn.addEventListener('click', () => {
+      this.editor.scaleObject(0.8); // Scale down by 20%
+      this.updateScaleDisplay();
+    });
+
+    this.clearObjectsBtn.addEventListener('click', () => {
+      if (confirm('Clear all decorative objects?')) {
+        this.editor.objects = [];
+        this.editor.renderAllObjects();
+        this.updateObjectList();
+      }
+    });
+
+    // Brush size slider
+    this.brushSizeSlider.addEventListener('input', (e) => {
+      const size = parseInt(e.target.value);
+      this.brushSizeValue.textContent = size;
+      this.editor.setBrushSize(size);
+    });
+
+    // Auto-tile toggle
+    this.autoTileToggle.addEventListener('change', (e) => {
+      this.editor.toggleAutoTile(e.target.checked);
     });
 
     // Rotate button
@@ -333,6 +531,26 @@ export class EditorUI {
     eventBus.on('checkpoint-removed', (data) => {
       this.updateCheckpointList();
     });
+
+    // Object added
+    eventBus.on('object-added', (data) => {
+      this.updateObjectList();
+    });
+
+    // Object removed
+    eventBus.on('object-removed', (data) => {
+      this.updateObjectList();
+    });
+
+    // Object rotation changed
+    eventBus.on('editor-object-rotation-changed', (data) => {
+      this.updateRotationDisplay();
+    });
+
+    // Object scale changed
+    eventBus.on('editor-object-scale-changed', (data) => {
+      this.updateScaleDisplay();
+    });
   }
 
   /**
@@ -381,15 +599,33 @@ export class EditorUI {
     // Update button states
     this.modeTilesBtn.classList.toggle('active', mode === 'tiles');
     this.modeCheckpointsBtn.classList.toggle('active', mode === 'checkpoints');
+    this.modeWaypointsBtn.classList.toggle('active', mode === 'waypoints');
+    this.modeDecorationsBtn.classList.toggle('active', mode === 'decorations');
 
     // Show/hide relevant panels
     if (mode === 'tiles') {
       this.tilePalette.classList.remove('hidden');
       this.checkpointControls.classList.add('hidden');
+      this.waypointControls.classList.add('hidden');
+      this.decorationControls.classList.add('hidden');
     } else if (mode === 'checkpoints') {
       this.tilePalette.classList.add('hidden');
       this.checkpointControls.classList.remove('hidden');
+      this.waypointControls.classList.add('hidden');
+      this.decorationControls.classList.add('hidden');
       this.updateCheckpointList();
+    } else if (mode === 'waypoints') {
+      this.tilePalette.classList.add('hidden');
+      this.checkpointControls.classList.add('hidden');
+      this.waypointControls.classList.remove('hidden');
+      this.decorationControls.classList.add('hidden');
+      this.updateWaypointList();
+    } else if (mode === 'decorations') {
+      this.tilePalette.classList.add('hidden');
+      this.checkpointControls.classList.add('hidden');
+      this.waypointControls.classList.add('hidden');
+      this.decorationControls.classList.remove('hidden');
+      this.updateObjectList();
     }
   }
 
@@ -420,6 +656,121 @@ export class EditorUI {
 
       this.checkpointItemsDiv.appendChild(item);
     });
+  }
+
+  /**
+   * Update object list UI
+   */
+  updateObjectList() {
+    this.objectItemsDiv.innerHTML = '';
+
+    if (this.editor.objects.length === 0) {
+      this.objectItemsDiv.innerHTML = '<div class="info-text">No objects placed yet</div>';
+      return;
+    }
+
+    this.editor.objects.forEach((obj, index) => {
+      const objDef = ObjectRegistry[obj.type.toUpperCase().replace(/[_-]/g, '_')];
+      const item = document.createElement('div');
+      item.className = 'object-item';
+      item.innerHTML = `
+        <span>${objDef?.name || obj.type} ${index + 1}</span>
+        <button class="delete-object-btn" data-id="${obj.id}">🗑️</button>
+      `;
+
+      // Delete button handler
+      const deleteBtn = item.querySelector('.delete-object-btn');
+      deleteBtn.addEventListener('click', () => {
+        this.editor.removeObject(obj.id);
+      });
+
+      this.objectItemsDiv.appendChild(item);
+    });
+  }
+
+  /**
+   * Update waypoint list UI
+   */
+  updateWaypointList() {
+    this.waypointItemsDiv.innerHTML = '';
+    this.waypointCountSpan.textContent = this.editor.waypoints.length;
+
+    if (this.editor.waypoints.length === 0) {
+      this.waypointItemsDiv.innerHTML = '<div class="info-text">No waypoints placed yet</div>';
+      return;
+    }
+
+    this.editor.waypoints.forEach((waypoint, index) => {
+      const item = document.createElement('div');
+      item.className = 'waypoint-item';
+      item.innerHTML = `
+        <span>Waypoint ${index + 1}: (${waypoint.position.x.toFixed(1)}, ${waypoint.position.z.toFixed(1)})</span>
+        <button class="delete-waypoint-btn" data-id="${waypoint.id}">🗑️</button>
+      `;
+
+      // Delete button handler
+      const deleteBtn = item.querySelector('.delete-waypoint-btn');
+      deleteBtn.addEventListener('click', () => {
+        this.editor.removeWaypoint(waypoint.id);
+        this.updateWaypointList();
+      });
+
+      this.waypointItemsDiv.appendChild(item);
+    });
+  }
+
+  /**
+   * Visualize direction field for debugging
+   */
+  visualizeDirectionField() {
+    if (this.editor.waypoints.length < 2) {
+      alert('Need at least 2 waypoints to visualize direction field');
+      return;
+    }
+
+    // Import DirectionField
+    import('../ai/DirectionField.js').then(({ DirectionField }) => {
+      const field = new DirectionField({
+        gridWidth: this.editor.gridWidth,
+        gridHeight: this.editor.gridHeight,
+        tileSize: this.editor.tileSize,
+        waypoints: this.editor.waypoints
+      });
+
+      // Visualize with arrows (every 3 cells)
+      const arrows = field.visualize(this.editor.scene, 3);
+
+      // Store for cleanup
+      if (!this.directionFieldArrows) {
+        this.directionFieldArrows = [];
+      }
+
+      // Clear old arrows
+      this.directionFieldArrows.forEach(arrow => this.editor.scene.remove(arrow));
+      this.directionFieldArrows = arrows;
+
+      console.log('Direction field visualized');
+    });
+  }
+
+  /**
+   * Update rotation display
+   */
+  updateRotationDisplay() {
+    const degrees = (this.editor.objectRotation * 180 / Math.PI).toFixed(0);
+    if (this.rotationDisplay) {
+      this.rotationDisplay.textContent = `${degrees}°`;
+    }
+  }
+
+  /**
+   * Update scale display
+   */
+  updateScaleDisplay() {
+    const scale = this.editor.objectScale;
+    if (this.scaleDisplay) {
+      this.scaleDisplay.textContent = `${scale.x.toFixed(2)}x`;
+    }
   }
 
   /**

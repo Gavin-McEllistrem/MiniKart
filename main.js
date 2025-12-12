@@ -8,15 +8,22 @@ import { Renderer } from "./src/core/Renderer.js";
 import { Track } from "./src/track/Track.js";
 import { testTrack } from "./src/track/tracks/testTrack.js";
 import { eventBus } from "./src/utils/EventBus.js";
+import { RenderConfig } from "./src/config/RenderConfig.js";
+import { WaypointAI } from "./src/ai/WaypointAI.js";
 
 // Core systems
 let renderer;
 let game;
 let chaseCamera;
 let renderMode = 'prototype'; // prototype | full
+RenderConfig.setMode(renderMode);
 let cpuDebugVisible = false;
 let winModalEl;
 let winTextEl;
+let currentTrackName = 'Track';
+let directionFieldArrows = [];
+let aiTargetMarker = null;
+let aiSteeringArrow = null;
 
 // UI elements
 const hudEl = document.getElementById("hud");
@@ -30,6 +37,11 @@ const winMenuBtn = document.getElementById("win-menu");
 // Check URL params for test mode
 const urlParams = new URLSearchParams(window.location.search);
 const isTestMode = urlParams.get('mode') === 'test';
+const renderParam = urlParams.get('render');
+if (renderParam === 'full') {
+  renderMode = 'full';
+  RenderConfig.setMode(renderMode);
+}
 
 function init() {
   // Show main menu unless in test mode
@@ -71,9 +83,12 @@ function startGame(customTrackData = null) {
   // Hide main menu
   mainMenu.classList.add('hidden');
 
+  // Sync render config
+  RenderConfig.setMode(renderMode);
+
   // Create renderer
   renderer = new Renderer({
-    antialias: true,
+    antialias: false,
     shadows: true,
     backgroundColor: 0x87CEEB // Sky blue
   });
@@ -82,8 +97,7 @@ function startGame(customTrackData = null) {
   // Create game instance
   game = new Game(renderer.scene, {
     wallSlideSpeedPenalty: 0.7,
-    wallStopSpeedPenalty: 0.5,
-    winCondition: { lapsToWin: 3, enabled: true }
+    wallStopSpeedPenalty: 0.5
   });
 
   // Create input manager
@@ -92,10 +106,14 @@ function startGame(customTrackData = null) {
 
   // Create track (use custom track if provided, otherwise use testTrack)
   const trackData = customTrackData || testTrack;
+  currentTrackName = trackData.name || 'Track';
   const track = new Track(renderer.scene, {
-    tileSize: 10,
+    tileSize: trackData.tileSize ?? 10,
     trackData: trackData.layout,
     checkpointsData: trackData.checkpoints || [],
+    objectsData: trackData.objects || [],
+    skyboxId: trackData.skybox || 'default',
+    waypointsData: trackData.waypoints || [],
     renderMode
   });
   game.setTrack(track);
@@ -118,32 +136,57 @@ function startGame(customTrackData = null) {
   player.mesh.rotation.y = player.heading;
   game.setPlayer(player);
 
-  // Create a simple CPU kart to race against the player
-  const cpuKart = new Kart(renderer.scene, {
-    id: 'cpu-1',
-    isPlayer: false,
-    color: 0x3a86ff,
-    mode: 'prototype',
-    renderMode,
-    modelVariant: 'audi'
-  });
+  // Create CPU karts
+  const directionField = track.getDirectionField();
+  const cpuColors = [0x3a86ff, 0xff006e, 0x06ffa5, 0xffbe0b, 0x8338ec, 0xfb5607, 0x06d6a0];
+  for (let i = 0; i < cpuColors.length; i++) {
+    const maxSpeed = 45 + Math.random() * 2;
+    const acceleration = 40 + Math.random() * (maxSpeed - 40);
+    const turnSpeed = 1.8 + Math.random() * 0.2;
 
-  // Offset the CPU kart slightly so it doesn't overlap the player on spawn
-  const offset = new THREE.Vector3(2, 0, -3);
-  const rotatedOffset = new THREE.Vector3(
-    offset.x * Math.cos(startTransform.heading) - offset.z * Math.sin(startTransform.heading),
-    0,
-    offset.x * Math.sin(startTransform.heading) + offset.z * Math.cos(startTransform.heading)
-  );
-  cpuKart.pos.copy(startTransform.position).add(rotatedOffset);
-  cpuKart.heading = startTransform.heading;
-  cpuKart.mesh.position.copy(cpuKart.pos);
-  cpuKart.mesh.rotation.y = cpuKart.heading;
-  cpuKart.aiDriver = new CpuDriver({
-    targetSpeedFactor: 0.9,
-    cornerSlowdownAngle: 1.0
-  });
-  game.addKart(cpuKart);
+    const cpuKart = new Kart(renderer.scene, {
+      id: `cpu-${i + 1}`,
+      isPlayer: false,
+      color: cpuColors[i],
+      mode: 'prototype',
+      renderMode,
+      maxSpeed,
+      acceleration,
+      turnSpeed,
+      modelVariant: 'audi'
+    });
+
+    // Offset spawn in small grid behind player
+    const row = Math.floor(i / 3);
+    const col = i % 3;
+    const offset = new THREE.Vector3((col - 1) * 3, 0, -3 - row * 3);
+    const rotatedOffset = new THREE.Vector3(
+      offset.x * Math.cos(startTransform.heading) - offset.z * Math.sin(startTransform.heading),
+      0,
+      offset.x * Math.sin(startTransform.heading) + offset.z * Math.cos(startTransform.heading)
+    );
+    cpuKart.pos.copy(startTransform.position).add(rotatedOffset);
+    cpuKart.heading = startTransform.heading;
+    cpuKart.mesh.position.copy(cpuKart.pos);
+    cpuKart.mesh.rotation.y = cpuKart.heading;
+
+    if (directionField) {
+      cpuKart.aiDriver = new WaypointAI(cpuKart, directionField, {
+        targetDistance: 10,
+        updateInterval: 10,
+        steeringStrength: 1.0,
+        maxSpeed: 1.0,
+        minSpeed: 0.3
+      });
+    } else {
+      cpuKart.aiDriver = new CpuDriver({
+        targetSpeedFactor: 0.9,
+        cornerSlowdownAngle: 1.0
+      });
+    }
+
+    game.addKart(cpuKart);
+  }
 
   // Create chase camera
   chaseCamera = new Camera(renderer.camera, {
@@ -211,6 +254,61 @@ function startGame(customTrackData = null) {
 init();
 
 /**
+ * Toggle direction field visualization
+ */
+function toggleDirectionFieldVisualization() {
+  if (directionFieldArrows.length > 0) {
+    directionFieldArrows.forEach(arrow => renderer.scene.remove(arrow));
+    directionFieldArrows = [];
+    return;
+  }
+  const directionField = game.track?.getDirectionField();
+  if (directionField) {
+    directionFieldArrows = directionField.visualize(renderer.scene, 1);
+  }
+}
+
+/**
+ * Toggle AI target visualization
+ */
+function toggleAITargetVisualization() {
+  if (aiTargetMarker) {
+    renderer.scene.remove(aiTargetMarker);
+    aiTargetMarker = null;
+    return;
+  }
+  const geometry = new THREE.SphereGeometry(0.5, 16, 16);
+  const material = new THREE.MeshBasicMaterial({
+    color: 0xff00ff,
+    wireframe: true
+  });
+  aiTargetMarker = new THREE.Mesh(geometry, material);
+  renderer.scene.add(aiTargetMarker);
+}
+
+/**
+ * Toggle AI steering visualization
+ */
+function toggleAISteeringVisualization() {
+  if (aiSteeringArrow) {
+    renderer.scene.remove(aiSteeringArrow);
+    aiSteeringArrow = null;
+    return;
+  }
+  const dir = new THREE.Vector3(0, 0, 1);
+  const origin = new THREE.Vector3(0, 2, 0);
+  aiSteeringArrow = new THREE.ArrowHelper(
+    dir,
+    origin,
+    5,
+    0x00ffff,
+    1.5,
+    1
+  );
+  renderer.scene.add(aiSteeringArrow);
+}
+
+/**
  * Setup keyboard controls
  */
 function setupControls() {
@@ -230,6 +328,21 @@ function setupControls() {
       const currentlyVisible = checkpointSystem.checkpoints.length > 0 && checkpointSystem.checkpoints[0].mesh.visible;
       checkpointSystem.setCheckpointsVisible(!currentlyVisible);
       console.log('Checkpoint visibility:', !currentlyVisible ? 'ON' : 'OFF');
+    }
+
+    // Toggle direction field visualization (F key for "field")
+    if (key === 'f' && game.track) {
+      toggleDirectionFieldVisualization();
+    }
+
+    // Toggle AI target visualization (T key for "target")
+    if (key === 't') {
+      toggleAITargetVisualization();
+    }
+
+    // Toggle AI steering visualization (G key for "steering")
+    if (key === 'g') {
+      toggleAISteeringVisualization();
     }
 
     // Toggle camera mode (C key)
@@ -304,6 +417,34 @@ function animate() {
 
   // Update orbit controls if enabled
   renderer.updateOrbitControls();
+
+  // Update AI debug visuals if visible
+  const cpuKart = game.karts.find(k => !k.isPlayer && k.aiDriver);
+
+  if (aiTargetMarker && cpuKart) {
+    if (cpuKart.aiDriver.getTarget) {
+      const target = cpuKart.aiDriver.getTarget();
+      if (target) {
+        aiTargetMarker.position.copy(target);
+        aiTargetMarker.visible = true;
+      } else {
+        aiTargetMarker.visible = false;
+      }
+    }
+  }
+
+  if (aiSteeringArrow && cpuKart) {
+    const cpuPos = cpuKart.mesh.position;
+    aiSteeringArrow.position.set(cpuPos.x, cpuPos.y + 2, cpuPos.z);
+
+    if (cpuKart.aiDriver.getTarget && cpuKart.aiDriver.currentTarget) {
+      const targetVector = new THREE.Vector3()
+        .subVectors(cpuKart.aiDriver.currentTarget, cpuPos)
+        .normalize();
+      targetVector.y = 0;
+      aiSteeringArrow.setDirection(targetVector);
+    }
+  }
 
   // Update HUD
   updateHUD();
@@ -387,7 +528,7 @@ function updateHUD() {
   }
 
   hudEl.textContent =
-    `=== ${testTrack.name.toUpperCase()} ===\n` +
+    `=== ${currentTrackName?.toUpperCase?.() || 'TRACK'} ===\n` +
     `Speed: ${speed} m/s${driftStatus}${boostStatus}\n` +
     `Position: (${player.pos.x.toFixed(1)}, ${player.pos.z.toFixed(1)})\n` +
     `Heading: ${(player.heading * 180 / Math.PI).toFixed(0)}°\n` +
@@ -405,6 +546,9 @@ function updateHUD() {
     `SPACE/SHIFT - Drift\n` +
     `C - Toggle Camera Mode\n` +
     `V - Toggle Debug Vectors\n` +
+    `F - Toggle Direction Field\n` +
+    `T - Toggle AI Target\n` +
+    `G - Toggle AI Steering\n` +
     `B - Toggle CPU Debug\n` +
     `H - Toggle Checkpoints\n` +
     `R - Reset Kart\n` +
@@ -423,7 +567,7 @@ function updateCpuDebugButton() {
 
 function toggleCpuDebug(visible) {
   const cpu = game?.karts?.find(k => !k.isPlayer);
-  if (cpu?.aiDriver) {
+  if (cpu?.aiDriver?.setDebugVisible) {
     cpu.aiDriver.setDebugVisible(game.track, visible);
   }
 }
@@ -431,6 +575,7 @@ function toggleCpuDebug(visible) {
 // Mode toggle UI
 modeBtn?.addEventListener('click', () => {
   renderMode = renderMode === 'prototype' ? 'full' : 'prototype';
+  RenderConfig.setMode(renderMode);
   if (game?.track) {
     game.track.setRenderMode(renderMode);
   }

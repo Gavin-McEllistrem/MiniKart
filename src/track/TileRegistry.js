@@ -8,6 +8,8 @@
  * - geometry: shape data
  * - material: visual properties
  * - collision: whether kart can drive on it
+ * - texture: path to texture file (optional, for full mode)
+ * - textureRepeat: texture repeat settings (optional)
  */
 
 export const TileRegistry = {
@@ -17,9 +19,11 @@ export const TileRegistry = {
     name: 'Straight Road',
     type: 'road',
     collision: true,
-    color: 0x444444, // Dark gray asphalt
+    color: 0x444444,
     roughness: 0.9,
-    metalness: 0.1
+    metalness: 0.1,
+    texture: 'assets/asphalt.jpg',
+    textureRepeat: { x: 1, y: 1 }
   },
 
   CORNER: {
@@ -29,7 +33,9 @@ export const TileRegistry = {
     collision: true,
     color: 0x444444,
     roughness: 0.9,
-    metalness: 0.1
+    metalness: 0.1,
+    texture: null,
+    textureRepeat: { x: 1, y: 1 }
   },
 
   START_FINISH: {
@@ -40,7 +46,9 @@ export const TileRegistry = {
     color: 0x444444,
     roughness: 0.9,
     metalness: 0.1,
-    hasCheckeredPattern: true
+    hasCheckeredPattern: true,
+    texture: null,
+    textureRepeat: { x: 1, y: 1 }
   },
 
   // Off-road tiles
@@ -49,10 +57,12 @@ export const TileRegistry = {
     name: 'Grass',
     type: 'offroad',
     collision: true,
-    color: 0x228B22, // Forest green
+    color: 0x228B22,
     roughness: 0.95,
     metalness: 0.0,
-    speedMultiplier: 0.6 // Slow down on grass
+    speedMultiplier: 0.6,
+    texture: 'assets/tiles/grass.png',
+    textureRepeat: { x: 1, y: 1 }
   },
 
   DIRT: {
@@ -60,10 +70,172 @@ export const TileRegistry = {
     name: 'Dirt',
     type: 'offroad',
     collision: true,
-    color: 0x8B7355, // Brown
+    color: 0x8B7355,
     roughness: 0.95,
     metalness: 0.0,
-    speedMultiplier: 0.7
+    speedMultiplier: 0.7,
+    texture: 'assets/tiles/dirt.png',
+    textureRepeat: { x: 1, y: 1 }
+  },
+
+  // Grass transition tiles
+  GRASS_TL: {
+    id: 'grass_tl',
+    name: 'Grass Top-Left',
+    type: 'offroad',
+    collision: true,
+    color: 0x228B22,
+    roughness: 0.95,
+    metalness: 0.0,
+    speedMultiplier: 0.6,
+    texture: 'assets/tiles/grass_tl.png',
+    textureRepeat: { x: 1, y: 1 }
+  },
+  GRASS_TR: {
+    id: 'grass_tr',
+    name: 'Grass Top-Right',
+    type: 'offroad',
+    collision: true,
+    color: 0x228B22,
+    roughness: 0.95,
+    metalness: 0.0,
+    speedMultiplier: 0.6,
+    texture: 'assets/tiles/grass_tr.png',
+    textureRepeat: { x: 1, y: 1 }
+  },
+  GRASS_BL: {
+    id: 'grass_bl',
+    name: 'Grass Bottom-Left',
+    type: 'offroad',
+    collision: true,
+    color: 0x228B22,
+    roughness: 0.95,
+    metalness: 0.0,
+    speedMultiplier: 0.6,
+    texture: 'assets/tiles/grass_bl.png',
+    textureRepeat: { x: 1, y: 1 }
+  },
+  GRASS_BR: {
+    id: 'grass_br',
+    name: 'Grass Bottom-Right',
+    type: 'offroad',
+    collision: true,
+    color: 0x228B22,
+    roughness: 0.95,
+    metalness: 0.0,
+    speedMultiplier: 0.6,
+    texture: 'assets/tiles/grass_br.png',
+    textureRepeat: { x: 1, y: 1 }
+  },
+
+  // Dirt transition tiles
+  DIRT_TL: {
+    id: 'dirt_tl',
+    name: 'Dirt Top-Left',
+    type: 'offroad',
+    collision: true,
+    color: 0x8B7355,
+    roughness: 0.95,
+    metalness: 0.0,
+    speedMultiplier: 0.7,
+    texture: 'assets/tiles/dirt_tl.png',
+    textureRepeat: { x: 1, y: 1 }
+  },
+  DIRT_TR: {
+    id: 'dirt_tr',
+    name: 'Dirt Top-Right',
+    type: 'offroad',
+    collision: true,
+    color: 0x8B7355,
+    roughness: 0.95,
+    metalness: 0.0,
+    speedMultiplier: 0.7,
+    texture: 'assets/tiles/dirt_tr.png',
+    textureRepeat: { x: 1, y: 1 }
+  },
+  DIRT_BL: {
+    id: 'dirt_bl',
+    name: 'Dirt Bottom-Left',
+    type: 'offroad',
+    collision: true,
+    color: 0x8B7355,
+    roughness: 0.95,
+    metalness: 0.0,
+    speedMultiplier: 0.7,
+    texture: 'assets/tiles/dirt_bl.png',
+    textureRepeat: { x: 1, y: 1 }
+  },
+  DIRT_BR: {
+    id: 'dirt_br',
+    name: 'Dirt Bottom-Right',
+    type: 'offroad',
+    collision: true,
+    color: 0x8B7355,
+    roughness: 0.95,
+    metalness: 0.0,
+    speedMultiplier: 0.7,
+    texture: 'assets/tiles/dirt_br.png',
+    textureRepeat: { x: 1, y: 1 }
+  },
+  DIRT_L: {
+    id: 'dirt_l',
+    name: 'Dirt Left',
+    type: 'offroad',
+    collision: true,
+    color: 0x8B7355,
+    roughness: 0.95,
+    metalness: 0.0,
+    speedMultiplier: 0.7,
+    texture: 'assets/tiles/dirt_l.png',
+    textureRepeat: { x: 1, y: 1 }
+  },
+  DIRT_R: {
+    id: 'dirt_r',
+    name: 'Dirt Right',
+    type: 'offroad',
+    collision: true,
+    color: 0x8B7355,
+    roughness: 0.95,
+    metalness: 0.0,
+    speedMultiplier: 0.7,
+    texture: 'assets/tiles/dirt_r.png',
+    textureRepeat: { x: 1, y: 1 }
+  },
+  DIRT_T: {
+    id: 'dirt_t',
+    name: 'Dirt Top',
+    type: 'offroad',
+    collision: true,
+    color: 0x8B7355,
+    roughness: 0.95,
+    metalness: 0.0,
+    speedMultiplier: 0.7,
+    texture: 'assets/tiles/dirt_t.png',
+    textureRepeat: { x: 1, y: 1 }
+  },
+  DIRT_B: {
+    id: 'dirt_b',
+    name: 'Dirt Bottom',
+    type: 'offroad',
+    collision: true,
+    color: 0x8B7355,
+    roughness: 0.95,
+    metalness: 0.0,
+    speedMultiplier: 0.7,
+    texture: 'assets/tiles/dirt_b.png',
+    textureRepeat: { x: 1, y: 1 }
+  },
+  DIRT_B_2: {
+    id: 'dirt_b_2',
+    name: 'Dirt Bottom (Variation 2)',
+    type: 'offroad',
+    collision: true,
+    color: 0x8B7355,
+    roughness: 0.95,
+    metalness: 0.0,
+    speedMultiplier: 0.7,
+    texture: 'assets/tiles/dirt_b_2.png',
+    textureRepeat: { x: 1, y: 1 }
   },
 
   // Obstacles
@@ -71,11 +243,13 @@ export const TileRegistry = {
     id: 'wall',
     name: 'Wall',
     type: 'obstacle',
-    collision: false, // Can't drive through
-    color: 0xCCCCCC, // Light gray
+    collision: false,
+    color: 0xCCCCCC,
     roughness: 0.7,
     metalness: 0.3,
-    height: 2.0
+    height: 2.0,
+    texture: 'assets/tiles/wall.png',
+    textureRepeat: { x: 1, y: 1 }
   },
 
   BARRIER: {
@@ -83,11 +257,13 @@ export const TileRegistry = {
     name: 'Barrier',
     type: 'obstacle',
     collision: false,
-    color: 0xFF4444, // Red and white
+    color: 0xFF4444,
     roughness: 0.6,
     metalness: 0.4,
     height: 1.0,
-    hasStripes: true
+    hasStripes: true,
+    texture: null,
+    textureRepeat: { x: 1, y: 1 }
   },
 
   // Empty
@@ -96,15 +272,14 @@ export const TileRegistry = {
     name: 'Empty',
     type: 'empty',
     collision: false,
-    color: 0x333333, // Dark void
+    color: 0x333333,
     roughness: 1.0,
-    metalness: 0.0
+    metalness: 0.0,
+    texture: null,
+    textureRepeat: { x: 1, y: 1 }
   }
 };
 
-/**
- * Get tile definition by id
- */
 export function getTile(id) {
   for (const key in TileRegistry) {
     if (TileRegistry[key].id === id) {
@@ -114,9 +289,6 @@ export function getTile(id) {
   return TileRegistry.EMPTY;
 }
 
-/**
- * Get all tiles of a specific type
- */
 export function getTilesByType(type) {
   const tiles = [];
   for (const key in TileRegistry) {

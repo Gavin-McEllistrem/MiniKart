@@ -2,13 +2,17 @@ import * as THREE from 'three';
 import { TileRegistry, getTile } from '../track/TileRegistry.js';
 import { Track } from '../track/Track.js';
 import { eventBus } from '../utils/EventBus.js';
+import { Object3D } from '../entities/Object3D.js';
+import { getObject } from '../objects/ObjectRegistry.js';
+import { Waypoint } from '../entities/Waypoint.js';
 
 /**
  * MapEditor - Visual track editor
  *
  * Features:
  * - Grid-based tile placement
- * - Raycasting for mouse picking
+ * - Checkpoint line drawing
+ * - 3D object placement with rotation/scale
  * - Undo/redo system
  * - Save/load tracks
  * - Test mode
@@ -21,29 +25,45 @@ export class MapEditor {
     this.renderer = renderer;
     this.ui = null; // Will be set by EditorUI
 
-    // Grid settings
-    this.gridWidth = options.gridWidth ?? 30;
-    this.gridHeight = options.gridHeight ?? 30;
+    // Grid settings (tileSize can be overridden by loaded track data)
+    this.gridWidth = options.gridWidth ?? 60;
+    this.gridHeight = options.gridHeight ?? 60;
     this.tileSize = options.tileSize ?? 10;
 
     // Editor state
-    this.editorMode = 'tiles'; // 'tiles', 'checkpoints', 'decorations'
+    this.editorMode = 'tiles'; // 'tiles', 'checkpoints', 'decorations', 'waypoints'
     this.selectedTileType = 'straight';
-    this.currentRotation = 0; // 0, 90, 180, 270
+    this.currentRotation = 0; // 0, 90, 180, 270 degrees
     this.isPlacing = false;
     this.isPainting = false; // Track if mouse is held down
     this.lastPaintedCell = { x: -1, z: -1 }; // Prevent painting same cell repeatedly
     this.trackName = 'My Track';
+    this.skyboxId = 'default'; // Default skybox
+    this.brushSize = 1; // Brush radius (1 = single tile, 2 = 3x3, 3 = 5x5, etc.)
+    this.autoTileEnabled = true; // Auto-tiling feature
 
     // Checkpoints and decorations (independent of tiling)
     this.checkpoints = [];
-    this.decorations = [];
     this.checkpointMeshes = []; // Visual representations of checkpoints
+    this.objects = []; // 3D decorative objects
+    this.objectMeshes = []; // Visual representations
+    this.waypoints = []; // AI waypoints
+    this.waypointMeshes = []; // Visual representations of waypoints
 
     // Checkpoint drawing state
     this.isDrawingCheckpoint = false;
     this.checkpointStartPoint = null;
     this.checkpointPreviewLine = null;
+
+    // Waypoint state
+    this.nextWaypointId = 0;
+
+    // Decoration placement state
+    this.selectedObjectType = 'tree_pine'; // Default object
+    this.objectRotation = 0; // Rotation in radians
+    this.objectScale = { x: 1, y: 1, z: 1 }; // Scale multiplier
+    this.objectPreviewMesh = null; // Preview of object being placed
+    this.selectedObjectMesh = null; // Currently selected object for editing
 
     // Grid data (2D array)
     this.grid = [];
@@ -87,6 +107,14 @@ export class MapEditor {
    * Setup grid visual helper
    */
   setupGridVisuals() {
+    // Remove old helpers if rebuilding
+    if (this.gridHelper) {
+      this.scene.remove(this.gridHelper);
+    }
+    if (this.highlightMesh) {
+      this.scene.remove(this.highlightMesh);
+    }
+
     // Grid helper
     const size = Math.max(this.gridWidth, this.gridHeight) * this.tileSize;
     this.gridHelper = new THREE.GridHelper(size, Math.max(this.gridWidth, this.gridHeight), 0x888888, 0x444444);
@@ -164,6 +192,26 @@ export class MapEditor {
           worldX: intersection.x.toFixed(1),
           worldZ: intersection.z.toFixed(1)
         });
+      } else if (this.editorMode === 'waypoints') {
+        // Waypoint placement mode
+        // Emit world position for UI
+        eventBus.emit('editor-grid-hover', {
+          gridX: -1,
+          gridZ: -1,
+          worldX: intersection.x.toFixed(1),
+          worldZ: intersection.z.toFixed(1)
+        });
+      } else if (this.editorMode === 'decorations') {
+        // Decoration placement mode
+        this.updateObjectPreview(intersection);
+
+        // Emit world position for UI
+        eventBus.emit('editor-grid-hover', {
+          gridX: -1,
+          gridZ: -1,
+          worldX: intersection.x.toFixed(1),
+          worldZ: intersection.z.toFixed(1)
+        });
       } else {
         // Tile editing mode
         // Convert to grid coordinates
@@ -205,7 +253,7 @@ export class MapEditor {
   }
 
   /**
-   * Handle mouse down - start painting or drawing checkpoint
+   * Handle mouse down - start painting, drawing checkpoint, or placing object
    */
   onMouseDown(event) {
     // Only left click (button 0)
@@ -214,6 +262,12 @@ export class MapEditor {
     if (this.editorMode === 'checkpoints') {
       // Start drawing checkpoint
       this.startDrawingCheckpoint(event);
+    } else if (this.editorMode === 'waypoints') {
+      // Place waypoint
+      this.placeWaypoint(event);
+    } else if (this.editorMode === 'decorations') {
+      // Place decoration object
+      this.placeObject(event);
     } else {
       // Tile painting mode
       const { x: gridX, z: gridZ } = this.currentGridCell;
@@ -254,8 +308,25 @@ export class MapEditor {
       this.pushUndo();
     }
 
-    // Update grid
-    this.grid[gridZ][gridX] = tileType;
+    // Apply brush size
+    const radius = this.brushSize - 1;
+    for (let dz = -radius; dz <= radius; dz++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        const targetX = gridX + dx;
+        const targetZ = gridZ + dz;
+
+        // Check bounds
+        if (targetX >= 0 && targetX < this.gridWidth && targetZ >= 0 && targetZ < this.gridHeight) {
+          // Update grid
+          this.grid[targetZ][targetX] = tileType;
+
+          // Apply auto-tiling if enabled
+          if (this.autoTileEnabled) {
+            this.autoTile(targetX, targetZ);
+          }
+        }
+      }
+    }
 
     // Re-render grid
     this.renderGrid();
@@ -271,6 +342,102 @@ export class MapEditor {
   }
 
   /**
+   * Auto-tile: Automatically place transition tiles based on neighbors
+   */
+  autoTile(gridX, gridZ) {
+    const currentTile = this.grid[gridZ][gridX];
+
+    // Get neighbors (top, right, bottom, left)
+    const neighbors = {
+      top: gridZ > 0 ? this.grid[gridZ - 1][gridX] : null,
+      right: gridX < this.gridWidth - 1 ? this.grid[gridZ][gridX + 1] : null,
+      bottom: gridZ < this.gridHeight - 1 ? this.grid[gridZ + 1][gridX] : null,
+      left: gridX > 0 ? this.grid[gridZ][gridX - 1] : null,
+      topLeft: (gridZ > 0 && gridX > 0) ? this.grid[gridZ - 1][gridX - 1] : null,
+      topRight: (gridZ > 0 && gridX < this.gridWidth - 1) ? this.grid[gridZ - 1][gridX + 1] : null,
+      bottomLeft: (gridZ < this.gridHeight - 1 && gridX > 0) ? this.grid[gridZ + 1][gridX - 1] : null,
+      bottomRight: (gridZ < this.gridHeight - 1 && gridX < this.gridWidth - 1) ? this.grid[gridZ + 1][gridX + 1] : null
+    };
+
+    // Define tile categories
+    const isGrass = (tile) => tile && (tile === 'grass' || tile.startsWith('grass_'));
+    const isDirt = (tile) => tile && (tile === 'dirt' || tile.startsWith('dirt_'));
+    const isRoad = (tile) => tile && (tile === 'straight' || tile === 'corner' || tile === 'start_finish');
+
+    // Auto-tile logic: Place transition tiles
+    // Naming convention: tile_XX where XX indicates where that surface IS in the tile
+    // grass_tl = grass on top-left, dirt on bottom-right
+
+    if (isGrass(currentTile)) {
+      // Check for dirt neighbors
+      const hasDirtTop = isDirt(neighbors.top);
+      const hasDirtRight = isDirt(neighbors.right);
+      const hasDirtBottom = isDirt(neighbors.bottom);
+      const hasDirtLeft = isDirt(neighbors.left);
+
+      // Corner transitions - naming indicates where GRASS is
+      // If dirt is at bottom-right, grass should be at top-left
+      if (hasDirtBottom && hasDirtRight) {
+        this.grid[gridZ][gridX] = 'grass_tl';
+      } else if (hasDirtBottom && hasDirtLeft) {
+        this.grid[gridZ][gridX] = 'grass_tr';
+      } else if (hasDirtTop && hasDirtRight) {
+        this.grid[gridZ][gridX] = 'grass_bl';
+      } else if (hasDirtTop && hasDirtLeft) {
+        this.grid[gridZ][gridX] = 'grass_br';
+      }
+    }
+
+    // If current tile is dirt, check for grass neighbors and place dirt transitions
+    if (isDirt(currentTile)) {
+      const hasGrassTop = isGrass(neighbors.top);
+      const hasGrassRight = isGrass(neighbors.right);
+      const hasGrassBottom = isGrass(neighbors.bottom);
+      const hasGrassLeft = isGrass(neighbors.left);
+
+      // Edge transitions - naming indicates where the dirt is in the tile
+      // If grass is to the LEFT, we need dirt on the RIGHT side of this tile
+      if (hasGrassLeft && !hasGrassRight && !hasGrassTop && !hasGrassBottom) {
+        this.grid[gridZ][gridX] = 'dirt_r';
+      } else if (hasGrassRight && !hasGrassLeft && !hasGrassTop && !hasGrassBottom) {
+        this.grid[gridZ][gridX] = 'dirt_l';
+      } else if (hasGrassTop && !hasGrassBottom && !hasGrassLeft && !hasGrassRight) {
+        this.grid[gridZ][gridX] = 'dirt_b';
+      } else if (hasGrassBottom && !hasGrassTop && !hasGrassLeft && !hasGrassRight) {
+        this.grid[gridZ][gridX] = 'dirt_t';
+      }
+
+      // Corner transitions - naming indicates where dirt is
+      // If grass is at top-left, dirt should be at bottom-right of this tile
+      else if (hasGrassTop && hasGrassLeft) {
+        this.grid[gridZ][gridX] = 'dirt_br';
+      } else if (hasGrassTop && hasGrassRight) {
+        this.grid[gridZ][gridX] = 'dirt_bl';
+      } else if (hasGrassBottom && hasGrassLeft) {
+        this.grid[gridZ][gridX] = 'dirt_tr';
+      } else if (hasGrassBottom && hasGrassRight) {
+        this.grid[gridZ][gridX] = 'dirt_tl';
+      }
+    }
+  }
+
+  /**
+   * Set brush size
+   */
+  setBrushSize(size) {
+    this.brushSize = Math.max(1, Math.min(size, 5)); // Clamp between 1 and 5
+    eventBus.emit('editor-brush-size-changed', { size: this.brushSize });
+  }
+
+  /**
+   * Toggle auto-tiling
+   */
+  toggleAutoTile(enabled) {
+    this.autoTileEnabled = enabled;
+    eventBus.emit('editor-autotile-changed', { enabled: this.autoTileEnabled });
+  }
+
+  /**
    * Render entire grid from data
    */
   renderGrid() {
@@ -282,7 +449,8 @@ export class MapEditor {
     // Create new track from grid
     this.track = new Track(this.scene, {
       tileSize: this.tileSize,
-      trackData: this.grid
+      trackData: this.grid,
+      skyboxId: this.skyboxId
     });
   }
 
@@ -582,9 +750,12 @@ export class MapEditor {
       name: this.trackName,
       width: this.gridWidth,
       height: this.gridHeight,
+      tileSize: this.tileSize,
       layout: this.cloneGrid(),
       checkpoints: this.checkpoints,
-      decorations: this.decorations
+      objects: this.objects, // Changed from 'decorations' to 'objects'
+      skybox: this.skyboxId || 'default', // Skybox ID
+      waypoints: this.waypoints.map(wp => wp.toJSON()) // Waypoints for AI
     };
   }
 
@@ -595,7 +766,11 @@ export class MapEditor {
     this.trackName = trackData.name;
     this.gridWidth = trackData.width;
     this.gridHeight = trackData.height;
+    if (trackData.tileSize) {
+      this.tileSize = trackData.tileSize;
+    }
     this.grid = trackData.layout.map(row => [...row]);
+    this.skyboxId = trackData.skybox || 'default'; // Load skybox ID
 
     // Load checkpoints if present
     if (trackData.checkpoints) {
@@ -603,12 +778,27 @@ export class MapEditor {
       this.renderAllCheckpoints();
     }
 
-    // Load decorations if present
-    if (trackData.decorations) {
-      this.decorations = trackData.decorations.map(dec => ({...dec}));
+    // Load objects if present
+    if (trackData.objects) {
+      this.objects = trackData.objects.map(obj => ({...obj}));
+      this.renderAllObjects();
     }
 
-    this.renderGrid();
+    // Load waypoints if present
+    if (trackData.waypoints) {
+      this.clearWaypoints(); // Clear existing
+      trackData.waypoints.forEach(wpData => {
+        const waypoint = new Waypoint(this.scene, {
+          id: wpData.id,
+          position: new THREE.Vector3(wpData.position.x, wpData.position.y, wpData.position.z)
+        });
+        this.waypoints.push(waypoint);
+      });
+      this.nextWaypointId = this.waypoints.length;
+    }
+
+    // Rebuild visuals (also re-renders track)
+    this.setupGridVisuals(); // rebuild helpers in case tileSize changed
     eventBus.emit('editor-track-loaded', { trackName: this.trackName });
   }
 
@@ -696,6 +886,306 @@ export class MapEditor {
   }
 
   /**
+   * Set selected object type
+   */
+  async setSelectedObject(objectType) {
+    this.selectedObjectType = objectType;
+
+    // Reset rotation and scale to defaults
+    const objectDef = getObject(objectType);
+    if (objectDef) {
+      this.objectScale = { ...objectDef.defaultScale };
+      this.objectRotation = 0;
+    }
+
+    // Recreate preview
+    await this.updateObjectPreview(null, true);
+
+    eventBus.emit('editor-object-selected', { objectType });
+  }
+
+  /**
+   * Update object preview at cursor position
+   */
+  async updateObjectPreview(position, forceRecreate = false) {
+    // Remove old preview if recreating
+    if (forceRecreate && this.objectPreviewMesh) {
+      this.scene.remove(this.objectPreviewMesh);
+      if (this.objectPreviewMesh.geometry) this.objectPreviewMesh.geometry.dispose();
+      if (this.objectPreviewMesh.material) this.objectPreviewMesh.material.dispose();
+      this.objectPreviewMesh = null;
+    }
+
+    // Create preview mesh if needed
+    if (!this.objectPreviewMesh) {
+      const objectDef = getObject(this.selectedObjectType);
+      if (!objectDef) return;
+
+      // Create transparent preview using Object3D
+      const tempObj = new Object3D(this.scene, {
+        id: -1, // Temporary ID
+        type: this.selectedObjectType,
+        position: new THREE.Vector3(0, 0, 0),
+        rotation: new THREE.Euler(0, this.objectRotation, 0),
+        scale: this.objectScale
+      });
+
+      // Wait for the mesh to be created (in case of async GLTF loading)
+      let attempts = 0;
+      while (!tempObj.mesh && attempts < 100) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+        attempts++;
+      }
+
+      if (!tempObj.mesh) {
+        console.error('Failed to create preview mesh for', this.selectedObjectType);
+        return;
+      }
+
+      this.objectPreviewMesh = tempObj.mesh;
+
+      // Make material transparent for preview
+      if (this.objectPreviewMesh.material) {
+        this.objectPreviewMesh.material.transparent = true;
+        this.objectPreviewMesh.material.opacity = 0.5;
+        this.objectPreviewMesh.material.needsUpdate = true;
+      }
+
+      // Handle groups (like trees) and GLTF models
+      if (this.objectPreviewMesh.children) {
+        this.objectPreviewMesh.children.forEach(child => {
+          if (child.material) {
+            child.material.transparent = true;
+            child.material.opacity = 0.5;
+            child.material.needsUpdate = true;
+          }
+        });
+      }
+    }
+
+    // Update position if provided
+    if (position && this.objectPreviewMesh) {
+      this.objectPreviewMesh.position.x = position.x;
+      this.objectPreviewMesh.position.y = 0; // Place on ground
+      this.objectPreviewMesh.position.z = position.z;
+      this.objectPreviewMesh.visible = true;
+    } else if (this.objectPreviewMesh) {
+      this.objectPreviewMesh.visible = false;
+    }
+  }
+
+  /**
+   * Place object at cursor position
+   */
+  placeObject(event) {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+    this.raycaster.setFromCamera(this.mouse, this.camera);
+    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const intersection = new THREE.Vector3();
+
+    if (this.raycaster.ray.intersectPlane(plane, intersection)) {
+      const object = {
+        id: this.objects.length,
+        type: this.selectedObjectType,
+        position: { x: intersection.x, y: 0, z: intersection.z },
+        rotation: { x: 0, y: this.objectRotation, z: 0 },
+        scale: { ...this.objectScale }
+      };
+
+      this.objects.push(object);
+      this.renderObject(object);
+
+      eventBus.emit('object-added', { object });
+      console.log(`Object placed: ${this.selectedObjectType} at (${intersection.x.toFixed(1)}, ${intersection.z.toFixed(1)})`);
+    }
+  }
+
+  /**
+   * Render object in editor
+   */
+  renderObject(objectData) {
+    const position = new THREE.Vector3(
+      objectData.position.x,
+      objectData.position.y,
+      objectData.position.z
+    );
+
+    const rotation = new THREE.Euler(
+      objectData.rotation.x ?? 0,
+      objectData.rotation.y ?? 0,
+      objectData.rotation.z ?? 0
+    );
+
+    const scale = objectData.scale ?? { x: 1, y: 1, z: 1 };
+
+    const object = new Object3D(this.scene, {
+      id: objectData.id,
+      type: objectData.type,
+      position,
+      rotation,
+      scale
+    });
+
+    this.objectMeshes.push(object);
+  }
+
+  /**
+   * Render all objects
+   */
+  renderAllObjects() {
+    // Clear existing
+    this.objectMeshes.forEach(obj => obj.destroy());
+    this.objectMeshes = [];
+
+    // Render all
+    this.objects.forEach(obj => this.renderObject(obj));
+  }
+
+  /**
+   * Remove object by ID
+   */
+  removeObject(id) {
+    const index = this.objects.findIndex(obj => obj.id === id);
+    if (index !== -1) {
+      this.objects.splice(index, 1);
+
+      // Reindex
+      this.objects.forEach((obj, i) => {
+        obj.id = i;
+      });
+
+      // Re-render all objects
+      this.renderAllObjects();
+
+      eventBus.emit('object-removed', { id });
+    }
+  }
+
+  /**
+   * Rotate selected object type
+   */
+  rotateObject(angle) {
+    this.objectRotation += angle;
+    this.objectRotation = this.objectRotation % (Math.PI * 2); // Keep in 0-2π range
+
+    // Update preview
+    if (this.objectPreviewMesh) {
+      this.objectPreviewMesh.rotation.y = this.objectRotation;
+    }
+
+    eventBus.emit('editor-object-rotation-changed', { rotation: this.objectRotation });
+  }
+
+  /**
+   * Scale selected object type
+   */
+  async scaleObject(factor) {
+    this.objectScale.x *= factor;
+    this.objectScale.y *= factor;
+    this.objectScale.z *= factor;
+
+    // Recreate preview with new scale
+    await this.updateObjectPreview(null, true);
+
+    eventBus.emit('editor-object-scale-changed', { scale: this.objectScale });
+  }
+
+  /**
+   * Place waypoint at click position
+   */
+  placeWaypoint(event) {
+    // Get world position from raycast
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const mouse = new THREE.Vector2(
+      ((event.clientX - rect.left) / rect.width) * 2 - 1,
+      -((event.clientY - rect.top) / rect.height) * 2 + 1
+    );
+
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(mouse, this.camera);
+
+    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const intersection = new THREE.Vector3();
+
+    if (raycaster.ray.intersectPlane(plane, intersection)) {
+      // Create waypoint
+      const waypoint = new Waypoint(this.scene, {
+        id: this.nextWaypointId++,
+        position: intersection.clone()
+      });
+
+      this.waypoints.push(waypoint);
+      eventBus.emit('editor-waypoint-placed', { waypoint });
+    }
+  }
+
+  /**
+   * Remove waypoint by ID
+   */
+  removeWaypoint(id) {
+    const index = this.waypoints.findIndex(wp => wp.id === id);
+    if (index !== -1) {
+      this.waypoints[index].destroy();
+      this.waypoints.splice(index, 1);
+
+      // Reindex waypoints
+      this.waypoints.forEach((wp, i) => {
+        wp.id = i;
+        // Update label
+        wp.destroy();
+        const newWp = new Waypoint(this.scene, {
+          id: i,
+          position: wp.position
+        });
+        this.waypoints[i] = newWp;
+      });
+
+      this.nextWaypointId = this.waypoints.length;
+      eventBus.emit('editor-waypoint-removed', { id });
+    }
+  }
+
+  /**
+   * Clear all waypoints
+   */
+  clearWaypoints() {
+    this.waypoints.forEach(wp => wp.destroy());
+    this.waypoints = [];
+    this.nextWaypointId = 0;
+    eventBus.emit('editor-waypoints-cleared');
+  }
+
+  /**
+   * Update method - call every frame
+   */
+  update() {
+    // Update viewport culler for performance
+    if (this.cullingEnabled && this.culler) {
+      this.culler.update();
+    }
+  }
+
+  /**
+   * Get culling statistics
+   */
+  getCullingStats() {
+    return this.culler ? this.culler.getStats() : null;
+  }
+
+  /**
+   * Toggle culling on/off
+   */
+  toggleCulling(enabled) {
+    this.cullingEnabled = enabled;
+    if (this.culler) {
+      this.culler.setEnabled(enabled);
+    }
+  }
+
+  /**
    * Clean up resources
    */
   destroy() {
@@ -711,7 +1201,18 @@ export class MapEditor {
     });
     this.checkpointMeshes = [];
 
-    // Clean up preview line if exists
+    // Clean up object meshes
+    this.objectMeshes.forEach(obj => obj.destroy());
+    this.objectMeshes = [];
+
+    // Clean up preview meshes
+    if (this.objectPreviewMesh) {
+      this.scene.remove(this.objectPreviewMesh);
+      if (this.objectPreviewMesh.geometry) this.objectPreviewMesh.geometry.dispose();
+      if (this.objectPreviewMesh.material) this.objectPreviewMesh.material.dispose();
+      this.objectPreviewMesh = null;
+    }
+
     if (this.checkpointPreviewLine) {
       this.scene.remove(this.checkpointPreviewLine);
       this.checkpointPreviewLine.geometry.dispose();

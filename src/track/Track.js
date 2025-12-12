@@ -2,6 +2,11 @@ import * as THREE from 'three';
 import { getTile, TileRegistry } from './TileRegistry.js';
 import { CheckpointSystem } from './CheckpointSystem.js';
 import { Checkpoint } from '../entities/Checkpoint.js';
+import { Object3D } from '../entities/Object3D.js';
+import { TextureManager } from '../core/TextureManager.js';
+import { RenderConfig } from '../config/RenderConfig.js';
+import { SkyboxManager } from '../core/SkyboxManager.js';
+import { DirectionField } from '../ai/DirectionField.js';
 
 /**
  * Track - Grid-based track system
@@ -15,25 +20,38 @@ export class Track {
     this.tileSize = options.tileSize ?? 10; // Size of each grid tile (10x10 units)
     this.trackData = options.trackData ?? []; // 2D array of tile IDs
     this.checkpointsData = options.checkpointsData ?? []; // Array of checkpoint definitions
-    this.decorationsData = options.decorationsData ?? []; // Array of decoration definitions
-    this.renderMode = options.renderMode ?? 'prototype'; // 'prototype' | 'full'
+    this.decorationsData = options.decorationsData ?? []; // Array of decoration definitions (legacy)
+    this.objectsData = options.objectsData ?? []; // Array of 3D object definitions
+    this.skyboxId = options.skyboxId ?? 'default'; // Skybox to use for this track
+    this.waypointsData = options.waypointsData ?? []; // Waypoints for AI
+    this.renderMode = options.renderMode ?? RenderConfig.getMode() ?? 'prototype'; // 'prototype' | 'full'
+    RenderConfig.setMode(this.renderMode);
 
     // Track metadata
     this.width = 0; // Number of tiles wide
     this.height = 0; // Number of tiles tall
     this.startPosition = new THREE.Vector3(0, 0.5, 0);
-    this.startHeading = 0;
+    this.startHeading = Math.PI;
+    this.startAssigned = false;
 
     // Visual meshes
     this.tileMeshes = [];
     this.trackGroup = new THREE.Group();
     this.scene.add(this.trackGroup);
     this.materialCache = new Map();
-    this.textureCache = new Map();
-    this.textureLoader = new THREE.TextureLoader();
 
     // Checkpoint system
     this.checkpointSystem = null;
+
+    // 3D objects
+    this.objects = [];
+
+    // AI Direction field
+    this.directionField = null;
+    this._directionFieldArrows = [];
+
+    // Skybox
+    this.loadSkybox();
 
     if (this.trackData.length > 0) {
       this.buildTrack();
@@ -58,6 +76,7 @@ export class Track {
     if (mode !== 'prototype' && mode !== 'full') return;
     if (this.renderMode === mode) return;
     this.renderMode = mode;
+    RenderConfig.setMode(mode);
     this.buildTrack();
   }
 
@@ -65,24 +84,27 @@ export class Track {
    * Build track geometry from track data
    */
   buildTrack() {
-    // Clear existing track
     this.clearTrack();
+    this.clearObjects();
+    this._clearDirectionFieldVisualization();
     this.materialCache.clear();
+    this.startAssigned = false;
+    this._tileCache = new Map();
 
     this.height = this.trackData.length;
     this.width = this.trackData[0]?.length ?? 0;
 
-    // Build each tile
+    // Apply skybox (non-blocking)
+    this.loadSkybox();
+
     for (let row = 0; row < this.height; row++) {
       for (let col = 0; col < this.width; col++) {
         const tileId = this.trackData[row][col];
         const tile = getTile(tileId);
 
-        // Calculate world position (centered at origin)
         const x = (col - this.width / 2) * this.tileSize + this.tileSize / 2;
         const z = (row - this.height / 2) * this.tileSize + this.tileSize / 2;
 
-        // Create tile mesh
         const mesh = this._createTileMesh(tile, x, z);
         if (mesh) {
           this.trackGroup.add(mesh);
@@ -95,19 +117,26 @@ export class Track {
           });
         }
 
-        // Find start position
-        if (tileId === 'start_finish' && !this.startPosition.x) {
+        if (tileId === 'start_finish' && !this.startAssigned) {
           this.startPosition.set(x, 0.5, z);
-          this.startHeading = 0; // Default facing +Z
+          this.startHeading = Math.PI;
+          this.startAssigned = true;
         }
       }
     }
 
-    console.log(`Track built: ${this.width}x${this.height} tiles`);
-
-    // Load checkpoints if provided
     if (this.checkpointsData && this.checkpointsData.length > 0) {
       this.loadCheckpoints();
+    }
+
+    if (this.objectsData && this.objectsData.length > 0) {
+      this.loadObjects();
+    }
+
+    if (this.waypointsData && this.waypointsData.length >= 2) {
+      this.generateDirectionField();
+    } else {
+      this.directionField = null;
     }
   }
 
@@ -153,11 +182,98 @@ export class Track {
   }
 
   /**
+   * Load 3D objects from object data
+   */
+  loadObjects() {
+    this.clearObjects();
+
+    for (const objData of this.objectsData) {
+      const position = new THREE.Vector3(
+        objData.position.x,
+        objData.position.y,
+        objData.position.z
+      );
+
+      const rotation = new THREE.Euler(
+        objData.rotation?.x ?? 0,
+        objData.rotation?.y ?? 0,
+        objData.rotation?.z ?? 0
+      );
+
+      const scale = objData.scale ?? { x: 1, y: 1, z: 1 };
+
+      const object = new Object3D(this.scene, {
+        id: objData.id,
+        type: objData.type,
+        position,
+        rotation,
+        scale
+      });
+
+      this.objects.push(object);
+    }
+  }
+
+  /**
+   * Clear all placed objects
+   */
+  clearObjects() {
+    this.objects.forEach(obj => obj.destroy());
+    this.objects = [];
+  }
+
+  /**
+   * Generate direction field from waypoints for AI navigation
+   */
+  generateDirectionField() {
+    if (!this.waypointsData || this.waypointsData.length < 2) {
+      this.directionField = null;
+      return;
+    }
+
+    const waypoints = this.waypointsData.map(wpData => ({
+      id: wpData.id,
+      position: new THREE.Vector3(wpData.position.x, wpData.position.y, wpData.position.z),
+      toJSON: () => wpData
+    }));
+
+    this.directionField = new DirectionField({
+      gridWidth: this.width,
+      gridHeight: this.height,
+      tileSize: this.tileSize,
+      waypoints
+    });
+  }
+
+  /**
+   * Get direction field for AI (null if no waypoints)
+   */
+  getDirectionField() {
+    return this.directionField;
+  }
+
+  /**
+   * Remove any debug direction field arrows
+   */
+  _clearDirectionFieldVisualization() {
+    if (!this._directionFieldArrows) return;
+    this._directionFieldArrows.forEach(arrow => this.scene.remove(arrow));
+    this._directionFieldArrows = [];
+  }
+
+  /**
+   * Load skybox for this track
+   */
+  async loadSkybox() {
+    await SkyboxManager.loadSkybox(this.scene, this.skyboxId);
+  }
+
+  /**
    * Create 3D mesh for a tile
    */
   _createTileMesh(tile, x, z) {
     const height = tile.height ?? 0.2;
-    const geometry = new THREE.BoxGeometry(this.tileSize, height, this.tileSize);
+    const geometry = new THREE.BoxGeometry(this.tileSize * 1.01, height, this.tileSize * 1.01);
 
     const material = this._getTileMaterial(tile);
 
@@ -170,13 +286,14 @@ export class Track {
     mesh.userData.tile = tile;
     mesh.userData.tileId = tile.id;
 
-    // Special visual effects
-    if (tile.hasCheckeredPattern) {
-      this._addCheckeredPattern(mesh);
-    }
-
-    if (tile.hasStripes) {
-      this._addStripePattern(mesh);
+    // Special visual effects (only in prototype mode or when no texture)
+    if (!tile.texture || RenderConfig.isPrototype()) {
+      if (tile.hasCheckeredPattern) {
+        this._addCheckeredPattern(mesh);
+      }
+      if (tile.hasStripes) {
+        this._addStripePattern(mesh);
+      }
     }
 
     return mesh;
@@ -186,28 +303,33 @@ export class Track {
    * Create or reuse a material for a tile based on render mode
    */
   _getTileMaterial(tile) {
-    const key = `${this.renderMode}-${tile.id}`;
+    const key = `${RenderConfig.getMode()}-${tile.id}`;
     if (this.materialCache.has(key)) {
       return this.materialCache.get(key);
     }
 
-    let material;
-    if (this.renderMode === 'prototype') {
-      material = new THREE.MeshStandardMaterial({
-        color: tile.color,
-        roughness: tile.roughness,
-        metalness: tile.metalness
+    const materialOptions = {
+      color: tile.color,
+      roughness: tile.roughness,
+      metalness: tile.metalness
+    };
+
+    if (RenderConfig.isFull() && tile.texture) {
+      const texture = TextureManager.loadTexture(tile.texture, {
+        repeat: tile.textureRepeat,
+        wrapS: THREE.RepeatWrapping,
+        wrapT: THREE.RepeatWrapping
       });
-    } else {
-      const texture = this._createTileTexture(tile);
-      material = new THREE.MeshStandardMaterial({
-        color: tile.color,
-        roughness: tile.roughness,
-        metalness: tile.metalness,
-        map: texture
-      });
+      if (texture) {
+        materialOptions.map = texture;
+      }
     }
 
+    if (RenderConfig.isFull() && !materialOptions.map) {
+      materialOptions.map = this._createTileTexture(tile);
+    }
+
+    const material = new THREE.MeshStandardMaterial(materialOptions);
     this.materialCache.set(key, material);
     return material;
   }
@@ -216,18 +338,6 @@ export class Track {
    * Generate simple procedural textures for tiles
    */
   _createTileTexture(tile) {
-    // Try to use external textures when available
-    if (this.renderMode === 'full') {
-      if (tile.type === 'road' || tile.id === 'start_finish') {
-        const tex = this._getImageTexture('assets/asphalt.jpg');
-        if (tex) return tex;
-      }
-      if (tile.id === 'wall' || tile.id === 'barrier') {
-        const tex = this._getImageTexture('assets/wall.jpg');
-        if (tex) return tex;
-      }
-    }
-
     const canvas = document.createElement('canvas');
     canvas.width = 128;
     canvas.height = 128;
@@ -304,25 +414,6 @@ export class Track {
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.set(1, 1);
     return texture;
-  }
-
-  /**
-   * Load and cache an image texture
-   */
-  _getImageTexture(path) {
-    if (this.textureCache.has(path)) {
-      return this.textureCache.get(path);
-    }
-    try {
-      const tex = this.textureLoader.load(path);
-      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-      tex.repeat.set(1, 1);
-      this.textureCache.set(path, tex);
-      return tex;
-    } catch (e) {
-      console.warn('Failed to load texture', path, e);
-      return null;
-    }
   }
 
   /**
@@ -484,6 +575,8 @@ export class Track {
    */
   destroy() {
     this.clearTrack();
+    this.clearObjects();
+    this._clearDirectionFieldVisualization();
     this.scene.remove(this.trackGroup);
 
     // Destroy checkpoint system
