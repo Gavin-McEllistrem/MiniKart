@@ -308,8 +308,14 @@ export class Track {
       return this.materialCache.get(key);
     }
 
+    // Generate color based on tile type for prototype mode
+    let tileColor = tile.color;
+    if (RenderConfig.isPrototype()) {
+      tileColor = this._getProceduralColor(tile);
+    }
+
     const materialOptions = {
-      color: tile.color,
+      color: tileColor,
       roughness: tile.roughness,
       metalness: tile.metalness
     };
@@ -332,6 +338,30 @@ export class Track {
     const material = new THREE.MeshStandardMaterial(materialOptions);
     this.materialCache.set(key, material);
     return material;
+  }
+
+  /**
+   * Get procedural color for a tile in prototype mode
+   */
+  _getProceduralColor(tile) {
+    // Map tile types to distinct colors
+    if (tile.id === 'straight' || tile.id === 'corner') {
+      return 0x444444; // Dark gray for road
+    } else if (tile.id === 'start_finish') {
+      return 0x444444; // Same as road (pattern will differentiate)
+    } else if (tile.id === 'grass' || tile.id.startsWith('grass_')) {
+      return 0x228B22; // Forest green for grass
+    } else if (tile.id === 'dirt' || tile.id.startsWith('dirt_')) {
+      return 0x8B7355; // Brown for dirt
+    } else if (tile.id === 'wall') {
+      return 0xCCCCCC; // Light gray for walls
+    } else if (tile.id === 'barrier') {
+      return 0xFF4444; // Red for barriers
+    } else if (tile.id === 'empty') {
+      return 0x333333; // Dark gray for empty
+    }
+    // Default fallback
+    return 0x888888;
   }
 
   /**
