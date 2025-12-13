@@ -27,6 +27,7 @@ export class Kart {
 
     // Arcade controller (simple Mario Kart style)
     this.controller = new ArcadeController({
+        maxSpeed: options.maxSpeed
       // Using arcade defaults
     });
 

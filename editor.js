@@ -72,7 +72,7 @@ function initEditor() {
   mapEditor = new MapEditor(renderer.scene, renderer.camera, renderer.renderer, {
     gridWidth: 30,
     gridHeight: 30,
-    tileSize: 10
+    tileSize: 5
   });
 
   // Restore editor state if returning from test mode

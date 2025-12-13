@@ -17,7 +17,7 @@ export class ArcadeController {
     // Parameters
     this.acceleration = options.acceleration ?? 30; // How fast to speed up
     this.brakeForce = options.brakeForce ?? 80; // How fast to slow down
-    this.maxSpeed = options.maxSpeed ?? 40;
+    this.maxSpeed = options.maxSpeed ?? 60;
     this.reverseSpeed = options.reverseSpeed ?? 20;
     this.friction = options.friction ?? 25; // Natural slowdown
 
@@ -69,7 +69,7 @@ export class ArcadeController {
 
     // Boost handling with smooth transition
     if (this.boostTimer > 0) {
-      targetSpeed = this.boostSpeed * speedMultiplier; // Boost also affected by surface
+      targetSpeed = this.boostSpeed; // Boost NOT affected by surface (full power!)
       this.boostTimer -= delta;
     } else if (this.speed > this.maxSpeed * speedMultiplier) {
       // Smoothly decay back to max speed after boost ends or when hitting off-road
@@ -93,8 +93,7 @@ export class ArcadeController {
     }
 
     // Clamp speed (but allow exceeding max during boost transition)
-    // Use targetSpeed which already includes speedMultiplier
-    const maxAllowedSpeed = this.boostTimer > 0 ? targetSpeed : targetSpeed + 5; // Small buffer for smooth transition
+    const maxAllowedSpeed = this.boostTimer > 0 ? this.boostSpeed : targetSpeed + 5; // Full boost speed or normal max
     this.speed = THREE.MathUtils.clamp(this.speed, -this.reverseSpeed, maxAllowedSpeed);
 
     // --- Drift Mechanics ---

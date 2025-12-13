@@ -28,7 +28,7 @@ export class MapEditor {
     // Grid settings (tileSize can be overridden by loaded track data)
     this.gridWidth = options.gridWidth ?? 60;
     this.gridHeight = options.gridHeight ?? 60;
-    this.tileSize = options.tileSize ?? 10;
+    this.tileSize = options.tileSize ?? 5;
 
     // Editor state
     this.editorMode = 'tiles'; // 'tiles', 'checkpoints', 'decorations', 'waypoints'

@@ -17,7 +17,7 @@ import { DirectionField } from '../ai/DirectionField.js';
 export class Track {
   constructor(scene, options = {}) {
     this.scene = scene;
-    this.tileSize = options.tileSize ?? 10; // Size of each grid tile (10x10 units)
+    this.tileSize = options.tileSize ?? 5; // Size of each grid tile (5x5 units)
     this.trackData = options.trackData ?? []; // 2D array of tile IDs
     this.checkpointsData = options.checkpointsData ?? []; // Array of checkpoint definitions
     this.decorationsData = options.decorationsData ?? []; // Array of decoration definitions (legacy)
@@ -343,6 +343,11 @@ export class Track {
     canvas.height = 128;
     const ctx = canvas.getContext('2d');
 
+    // Convert hex color to CSS format
+    const hexToCSS = (hex) => {
+      return '#' + hex.toString(16).padStart(6, '0');
+    };
+
     const fill = (color) => {
       ctx.fillStyle = color;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -368,14 +373,17 @@ export class Track {
       }
     };
 
+    // Use tile's color property for consistent coloring
+    const tileColor = hexToCSS(tile.color);
+
     if (tile.type === 'road' || tile.id === 'start_finish') {
-      fill('#1f1f24');
+      fill(tileColor);
       addNoise(0.18);
       if (tile.id === 'start_finish') {
         addStripes('#ffffff', '#000000', 6);
       }
-    } else if (tile.id === 'grass' || tile.type === 'offroad') {
-      fill('#1f7a42');
+    } else if (tile.id === 'grass' || tile.id.startsWith('grass_')) {
+      fill(tileColor);
       addNoise(0.35);
       ctx.strokeStyle = 'rgba(255,255,255,0.08)';
       for (let i = 0; i < 60; i++) {
@@ -384,8 +392,8 @@ export class Track {
         ctx.lineTo(Math.random() * canvas.width, Math.random() * canvas.height);
         ctx.stroke();
       }
-    } else if (tile.id === 'dirt') {
-      fill('#6d4c32');
+    } else if (tile.id === 'dirt' || tile.id.startsWith('dirt_')) {
+      fill(tileColor);
       addNoise(0.3);
       ctx.fillStyle = 'rgba(30,15,0,0.18)';
       for (let i = 0; i < 90; i++) {
@@ -396,7 +404,7 @@ export class Track {
     } else if (tile.id === 'barrier') {
       addStripes('#ff3b3b', '#ffffff', 10);
     } else if (tile.id === 'wall') {
-      fill('#cfd4da');
+      fill(tileColor);
       addNoise(0.12);
       ctx.strokeStyle = 'rgba(255,255,255,0.15)';
       for (let y = 0; y < canvas.height; y += 16) {
@@ -406,7 +414,7 @@ export class Track {
         ctx.stroke();
       }
     } else {
-      fill('#4a4a4a');
+      fill(tileColor);
       addNoise(0.15);
     }
 

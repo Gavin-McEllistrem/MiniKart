@@ -108,7 +108,7 @@ function startGame(customTrackData = null) {
   const trackData = customTrackData || testTrack;
   currentTrackName = trackData.name || 'Track';
   const track = new Track(renderer.scene, {
-    tileSize: trackData.tileSize ?? 10,
+    tileSize: trackData.tileSize ?? 5,
     trackData: trackData.layout,
     checkpointsData: trackData.checkpoints || [],
     objectsData: trackData.objects || [],
