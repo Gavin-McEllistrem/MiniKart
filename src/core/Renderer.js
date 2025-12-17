@@ -45,7 +45,8 @@ export class Renderer {
     this.setupLighting(options.lighting);
 
     // Handle window resize
-    window.addEventListener('resize', () => this.onResize());
+    this._onResize = () => this.onResize();
+    window.addEventListener('resize', this._onResize);
   }
 
   /**
@@ -118,7 +119,7 @@ export class Renderer {
    * Clean up resources
    */
   destroy() {
-    window.removeEventListener('resize', this.onResize);
+    window.removeEventListener('resize', this._onResize);
     this.renderer.dispose();
   }
 }

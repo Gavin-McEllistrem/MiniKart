@@ -24,6 +24,11 @@ let currentTrackName = 'Track';
 let directionFieldArrows = [];
 let aiTargetMarker = null;
 let aiSteeringArrow = null;
+let lastTrackData = null;
+let returnBtnEl = null;
+let animationFrameId = null;
+let isAnimating = false;
+let keydownHandler = null;
 
 // UI elements
 const hudEl = document.getElementById("hud");
@@ -66,20 +71,22 @@ function init() {
 function showMainMenu() {
   mainMenu.classList.remove('hidden');
 
-  playBtn.addEventListener('click', () => {
+  playBtn.onclick = () => {
     mainMenu.classList.add('hidden');
     startGame();
-  });
+  };
 
-  editorBtn.addEventListener('click', () => {
+  editorBtn.onclick = () => {
     window.location.href = 'editor.html';
-  });
+  };
 }
 
 /**
  * Start the game
  */
 function startGame(customTrackData = null) {
+  cleanupGame();
+
   // Hide main menu
   mainMenu.classList.add('hidden');
 
@@ -106,6 +113,7 @@ function startGame(customTrackData = null) {
 
   // Create track (use custom track if provided, otherwise use testTrack)
   const trackData = customTrackData || testTrack;
+  lastTrackData = trackData;
   currentTrackName = trackData.name || 'Track';
   const track = new Track(renderer.scene, {
     tileSize: trackData.tileSize ?? 5,
@@ -223,7 +231,8 @@ function startGame(customTrackData = null) {
     returnBtn.textContent = '← Main Menu';
     returnBtn.addEventListener('click', () => {
       if (confirm('Return to main menu?')) {
-        location.reload();
+        cleanupGame();
+        showMainMenu();
       }
     });
   }
@@ -242,6 +251,7 @@ function startGame(customTrackData = null) {
     z-index: 100;
   `;
   document.body.appendChild(returnBtn);
+  returnBtnEl = returnBtn;
 
   // Start game
   game.start();
@@ -251,7 +261,7 @@ function startGame(customTrackData = null) {
   console.log('Start position:', startTransform.position);
 
   // Start render loop
-  animate();
+  startRenderLoop();
 }
 
 // Initialize game
@@ -316,7 +326,10 @@ function toggleAISteeringVisualization() {
  * Setup keyboard controls
  */
 function setupControls() {
-  window.addEventListener('keydown', (e) => {
+  if (keydownHandler) return;
+
+  keydownHandler = (e) => {
+    if (!game) return;
     const key = e.key.toLowerCase();
 
     // Toggle debug vectors (V key)
@@ -373,13 +386,18 @@ function setupControls() {
       cpuDebugVisible = !cpuDebugVisible;
       toggleCpuDebug(cpuDebugVisible);
     }
-  });
+  };
+
+  window.addEventListener('keydown', keydownHandler);
 }
 
 /**
  * Setup event listeners for game events
  */
 function setupEventListeners() {
+  // Avoid duplicate listeners across restarts
+  eventBus.clear();
+
   eventBus.on('boost-activated', (data) => {
     console.log('Boost activated!', data);
   });
@@ -414,7 +432,9 @@ function setupEventListeners() {
  * Main animation loop
  */
 function animate() {
-  requestAnimationFrame(animate);
+  if (!isAnimating) return;
+  animationFrameId = requestAnimationFrame(animate);
+  if (!game || !renderer) return;
 
   // Update game logic
   game.update();
@@ -455,6 +475,55 @@ function animate() {
 
   // Render scene
   renderer.render();
+}
+
+function startRenderLoop() {
+  if (isAnimating) return;
+  isAnimating = true;
+  animate();
+}
+
+function stopRenderLoop() {
+  isAnimating = false;
+  if (animationFrameId !== null) {
+    cancelAnimationFrame(animationFrameId);
+    animationFrameId = null;
+  }
+}
+
+function cleanupGame() {
+  stopRenderLoop();
+
+  if (winModalEl) winModalEl.style.display = 'none';
+
+  // Remove debug visuals from the old scene (if any)
+  if (renderer?.scene) {
+    directionFieldArrows.forEach(arrow => renderer.scene.remove(arrow));
+    if (aiTargetMarker) renderer.scene.remove(aiTargetMarker);
+    if (aiSteeringArrow) renderer.scene.remove(aiSteeringArrow);
+  }
+  directionFieldArrows = [];
+  aiTargetMarker = null;
+  aiSteeringArrow = null;
+  cpuDebugVisible = false;
+
+  if (returnBtnEl) {
+    returnBtnEl.remove();
+    returnBtnEl = null;
+  }
+
+  if (renderer) {
+    const dom = renderer.getDomElement?.();
+    if (dom?.parentNode) dom.parentNode.removeChild(dom);
+    renderer.destroy?.();
+  }
+
+  renderer = null;
+  game = null;
+  chaseCamera = null;
+
+  modeBtn.style.display = 'none';
+  hudEl.textContent = '';
 }
 
 /**
@@ -553,7 +622,6 @@ function updateHUD() {
     `F - Toggle Direction Field\n` +
     `T - Toggle AI Target\n` +
     `G - Toggle AI Steering\n` +
-    `B - Toggle CPU Debug\n` +
     `H - Toggle Checkpoints\n` +
     `R - Reset Kart\n` +
     `\n` +
@@ -616,10 +684,12 @@ function showWinModal(text) {
 
 winRestartBtn?.addEventListener('click', () => {
   if (winModalEl) winModalEl.style.display = 'none';
-  location.reload();
+  cleanupGame();
+  startGame(lastTrackData);
 });
 
 winMenuBtn?.addEventListener('click', () => {
   if (winModalEl) winModalEl.style.display = 'none';
-  location.reload();
+  cleanupGame();
+  showMainMenu();
 });
